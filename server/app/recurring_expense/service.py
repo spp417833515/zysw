@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from typing import Optional, List
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -41,7 +42,7 @@ async def _enrich(db: AsyncSession, item: RecurringExpense) -> dict:
     return _to_dict(item, cat_name, acc_name)
 
 
-async def get_all(db: AsyncSession) -> list[dict]:
+async def get_all(db: AsyncSession) -> List[dict]:
     result = await db.execute(select(RecurringExpense).order_by(RecurringExpense.created_at))
     items = result.scalars().all()
     return [await _enrich(db, item) for item in items]
@@ -66,7 +67,7 @@ async def create(db: AsyncSession, data: RecurringExpenseCreate) -> dict:
     return await _enrich(db, item)
 
 
-async def update(db: AsyncSession, item_id: str, data: RecurringExpenseUpdate) -> dict | None:
+async def update(db: AsyncSession, item_id: str, data: RecurringExpenseUpdate) -> Optional[dict]:
     item = await db.get(RecurringExpense, item_id)
     if not item:
         return None

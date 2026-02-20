@@ -1,3 +1,4 @@
+from typing import Optional
 from pydantic import BaseModel
 
 
@@ -13,14 +14,14 @@ class AccountCreate(BaseModel):
 
 
 class AccountUpdate(BaseModel):
-    name: str | None = None
-    type: str | None = None
-    balance: float | None = None
-    initialBalance: float | None = None
-    icon: str | None = None
-    color: str | None = None
-    description: str | None = None
-    isDefault: bool | None = None
+    name: Optional[str] = None
+    type: Optional[str] = None
+    balance: Optional[float] = None
+    initialBalance: Optional[float] = None
+    icon: Optional[str] = None
+    color: Optional[str] = None
+    description: Optional[str] = None
+    isDefault: Optional[bool] = None
 
 
 class AccountOut(BaseModel):

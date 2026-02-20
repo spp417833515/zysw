@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from typing import Optional, Union, List
 
 from sqlalchemy import select, or_
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -24,12 +25,12 @@ def _to_dict(account: Account) -> dict:
     }
 
 
-async def get_accounts(db: AsyncSession) -> list[dict]:
+async def get_accounts(db: AsyncSession) -> List[dict]:
     result = await db.execute(select(Account).order_by(Account.created_at))
     return [_to_dict(a) for a in result.scalars().all()]
 
 
-async def get_account_by_id(db: AsyncSession, account_id: str) -> dict | None:
+async def get_account_by_id(db: AsyncSession, account_id: str) -> Optional[dict]:
     account = await db.get(Account, account_id)
     return _to_dict(account) if account else None
 
@@ -51,7 +52,7 @@ async def create_account(db: AsyncSession, data: AccountCreate) -> dict:
     return _to_dict(account)
 
 
-async def update_account(db: AsyncSession, account_id: str, data: AccountUpdate) -> dict | None:
+async def update_account(db: AsyncSession, account_id: str, data: AccountUpdate) -> Optional[dict]:
     account = await db.get(Account, account_id)
     if not account:
         return None
@@ -66,7 +67,7 @@ async def update_account(db: AsyncSession, account_id: str, data: AccountUpdate)
     return _to_dict(account)
 
 
-async def delete_account(db: AsyncSession, account_id: str) -> bool | str:
+async def delete_account(db: AsyncSession, account_id: str) -> Union[bool, str]:
     account = await db.get(Account, account_id)
     if not account:
         return False

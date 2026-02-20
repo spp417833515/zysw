@@ -1,3 +1,4 @@
+from typing import Optional
 from sqlalchemy import select, func, and_, case
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -129,7 +130,7 @@ async def get_cash_flow(db: AsyncSession, start_date: str, end_date: str) -> dic
     }
 
 
-async def get_category_report(db: AsyncSession, start_date: str, end_date: str, type_filter: str | None = None) -> dict:
+async def get_category_report(db: AsyncSession, start_date: str, end_date: str, type_filter: Optional[str] = None) -> dict:
     date_filter = and_(Transaction.date >= start_date, Transaction.date <= end_date)
     conditions = [date_filter]
     if type_filter:

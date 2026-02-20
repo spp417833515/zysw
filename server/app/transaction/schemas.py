@@ -1,3 +1,4 @@
+from typing import Optional, List
 from pydantic import BaseModel
 
 
@@ -15,46 +16,48 @@ class TransactionCreate(BaseModel):
     date: str
     categoryId: str = ""
     accountId: str
-    toAccountId: str | None = None
+    toAccountId: Optional[str] = None
     description: str = ""
-    tags: list[str] = []
-    attachments: list[AttachmentSchema] = []
-    invoiceId: str | None = None
+    tags: List[str] = []
+    attachments: List[AttachmentSchema] = []
+    invoiceId: Optional[str] = None
     bookId: str = "default"
     paymentConfirmed: bool = False
-    paymentAccountType: str | None = None
+    paymentAccountType: Optional[str] = None
+    payerName: Optional[str] = None
     invoiceNeeded: bool = True
     invoiceCompleted: bool = False
     taxDeclared: bool = False
-    taxPeriod: str | None = None
+    taxPeriod: Optional[str] = None
     invoiceIssued: bool = False
-    invoiceImages: list[AttachmentSchema] = []
-    companyAccountDate: str | None = None
-    companyAccountImages: list[AttachmentSchema] = []
+    invoiceImages: List[AttachmentSchema] = []
+    companyAccountDate: Optional[str] = None
+    companyAccountImages: List[AttachmentSchema] = []
 
 
 class TransactionUpdate(BaseModel):
-    type: str | None = None
-    amount: float | None = None
-    date: str | None = None
-    categoryId: str | None = None
-    accountId: str | None = None
-    toAccountId: str | None = None
-    description: str | None = None
-    tags: list[str] | None = None
-    attachments: list[AttachmentSchema] | None = None
-    invoiceId: str | None = None
-    bookId: str | None = None
-    paymentConfirmed: bool | None = None
-    paymentAccountType: str | None = None
-    invoiceNeeded: bool | None = None
-    invoiceCompleted: bool | None = None
-    taxDeclared: bool | None = None
-    taxPeriod: str | None = None
-    invoiceIssued: bool | None = None
-    invoiceImages: list[AttachmentSchema] | None = None
-    companyAccountDate: str | None = None
-    companyAccountImages: list[AttachmentSchema] | None = None
+    type: Optional[str] = None
+    amount: Optional[float] = None
+    date: Optional[str] = None
+    categoryId: Optional[str] = None
+    accountId: Optional[str] = None
+    toAccountId: Optional[str] = None
+    description: Optional[str] = None
+    tags: Optional[List[str]] = None
+    attachments: Optional[List[AttachmentSchema]] = None
+    invoiceId: Optional[str] = None
+    bookId: Optional[str] = None
+    paymentConfirmed: Optional[bool] = None
+    paymentAccountType: Optional[str] = None
+    payerName: Optional[str] = None
+    invoiceNeeded: Optional[bool] = None
+    invoiceCompleted: Optional[bool] = None
+    taxDeclared: Optional[bool] = None
+    taxPeriod: Optional[str] = None
+    invoiceIssued: Optional[bool] = None
+    invoiceImages: Optional[List[AttachmentSchema]] = None
+    companyAccountDate: Optional[str] = None
+    companyAccountImages: Optional[List[AttachmentSchema]] = None
 
 
 class ConfirmPaymentRequest(BaseModel):
@@ -62,7 +65,7 @@ class ConfirmPaymentRequest(BaseModel):
 
 
 class ConfirmInvoiceRequest(BaseModel):
-    invoiceId: str | None = None
+    invoiceId: Optional[str] = None
 
 
 class ConfirmTaxRequest(BaseModel):

@@ -1,6 +1,7 @@
 import json
 import uuid
 from datetime import datetime, timezone
+from typing import Optional, List
 
 from sqlalchemy import select, func, and_
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -12,7 +13,7 @@ from app.transaction.models import Attachment, Transaction
 from app.transaction.schemas import TransactionCreate, TransactionUpdate
 
 
-def _to_dict(txn: Transaction, attachments: list[dict] | None = None,
+def _to_dict(txn: Transaction, attachments: Optional[list] = None,
              category_name: str = "", account_name: str = "", to_account_name: str = "") -> dict:
     return {
         "id": txn.id,
@@ -34,6 +35,7 @@ def _to_dict(txn: Transaction, attachments: list[dict] | None = None,
         "updatedAt": txn.updated_at,
         "paymentConfirmed": txn.payment_confirmed,
         "paymentAccountType": txn.payment_account_type,
+        "payerName": txn.payer_name,
         "paymentConfirmedAt": txn.payment_confirmed_at,
         "invoiceNeeded": txn.invoice_needed,
         "invoiceCompleted": txn.invoice_completed,
@@ -45,10 +47,12 @@ def _to_dict(txn: Transaction, attachments: list[dict] | None = None,
         "invoiceImages": json.loads(txn.invoice_images) if txn.invoice_images else [],
         "companyAccountDate": txn.company_account_date,
         "companyAccountImages": json.loads(txn.company_account_images) if txn.company_account_images else [],
+        "reimbursementBatchId": txn.reimbursement_batch_id,
+        "reimbursementStatus": txn.reimbursement_status,
     }
 
 
-async def _get_attachments(db: AsyncSession, transaction_id: str) -> list[dict]:
+async def _get_attachments(db: AsyncSession, transaction_id: str) -> List[dict]:
     result = await db.execute(
         select(Attachment).where(Attachment.transaction_id == transaction_id)
     )
@@ -58,7 +62,7 @@ async def _get_attachments(db: AsyncSession, transaction_id: str) -> list[dict]:
     ]
 
 
-async def _get_name(db: AsyncSession, model, obj_id: str | None) -> str:
+async def _get_name(db: AsyncSession, model, obj_id: Optional[str]) -> str:
     if not obj_id:
         return ""
     obj = await db.get(model, obj_id)
@@ -66,7 +70,7 @@ async def _get_name(db: AsyncSession, model, obj_id: str | None) -> str:
 
 
 async def _update_balance(db: AsyncSession, txn_type: str, amount: float,
-                          account_id: str, to_account_id: str | None, reverse: bool = False):
+                          account_id: str, to_account_id: Optional[str], reverse: bool = False):
     multiplier = -1 if reverse else 1
     account = await db.get(Account, account_id)
     if account:
@@ -86,14 +90,14 @@ async def get_transactions(
     db: AsyncSession,
     page: int = 1,
     page_size: int = 20,
-    type_filter: str | None = None,
-    category_id: str | None = None,
-    account_id: str | None = None,
-    date_start: str | None = None,
-    date_end: str | None = None,
-    keyword: str | None = None,
-    amount_min: float | None = None,
-    amount_max: float | None = None,
+    type_filter: Optional[str] = None,
+    category_id: Optional[str] = None,
+    account_id: Optional[str] = None,
+    date_start: Optional[str] = None,
+    date_end: Optional[str] = None,
+    keyword: Optional[str] = None,
+    amount_min: Optional[float] = None,
+    amount_max: Optional[float] = None,
 ) -> dict:
     conditions = []
     if type_filter:
@@ -145,7 +149,7 @@ async def get_transactions(
     }
 
 
-async def get_transaction_by_id(db: AsyncSession, txn_id: str) -> dict | None:
+async def get_transaction_by_id(db: AsyncSession, txn_id: str) -> Optional[dict]:
     txn = await db.get(Transaction, txn_id)
     if not txn:
         return None
@@ -170,6 +174,7 @@ async def create_transaction(db: AsyncSession, data: TransactionCreate) -> dict:
         book_id=data.bookId,
         payment_confirmed=data.paymentConfirmed,
         payment_account_type=data.paymentAccountType,
+        payer_name=data.payerName,
         invoice_needed=data.invoiceNeeded,
         invoice_completed=data.invoiceCompleted,
         tax_declared=data.taxDeclared,
@@ -210,7 +215,7 @@ async def create_transaction(db: AsyncSession, data: TransactionCreate) -> dict:
     return _to_dict(txn, att_dicts, cat_name, acc_name, to_acc_name)
 
 
-async def update_transaction(db: AsyncSession, txn_id: str, data: TransactionUpdate) -> dict | None:
+async def update_transaction(db: AsyncSession, txn_id: str, data: TransactionUpdate) -> Optional[dict]:
     txn = await db.get(Transaction, txn_id)
     if not txn:
         return None
@@ -227,6 +232,7 @@ async def update_transaction(db: AsyncSession, txn_id: str, data: TransactionUpd
         "bookId": "book_id",
         "paymentConfirmed": "payment_confirmed",
         "paymentAccountType": "payment_account_type",
+        "payerName": "payer_name",
         "invoiceNeeded": "invoice_needed",
         "invoiceCompleted": "invoice_completed",
         "taxDeclared": "tax_declared",
@@ -235,6 +241,8 @@ async def update_transaction(db: AsyncSession, txn_id: str, data: TransactionUpd
         "invoiceImages": "invoice_images",
         "companyAccountDate": "company_account_date",
         "companyAccountImages": "company_account_images",
+        "reimbursementBatchId": "reimbursement_batch_id",
+        "reimbursementStatus": "reimbursement_status",
     }
 
     # Handle attachments separately
@@ -313,7 +321,7 @@ async def delete_transaction(db: AsyncSession, txn_id: str) -> bool:
 
 # Workflow operations
 
-async def confirm_payment(db: AsyncSession, txn_id: str, account_type: str) -> dict | None:
+async def confirm_payment(db: AsyncSession, txn_id: str, account_type: str) -> Optional[dict]:
     txn = await db.get(Transaction, txn_id)
     if not txn:
         return None
@@ -331,7 +339,7 @@ async def confirm_payment(db: AsyncSession, txn_id: str, account_type: str) -> d
     return _to_dict(txn, attachments, cat_name, acc_name, to_acc_name)
 
 
-async def confirm_invoice(db: AsyncSession, txn_id: str, invoice_id: str | None = None) -> dict | None:
+async def confirm_invoice(db: AsyncSession, txn_id: str, invoice_id: Optional[str] = None) -> Optional[dict]:
     txn = await db.get(Transaction, txn_id)
     if not txn:
         return None
@@ -350,7 +358,7 @@ async def confirm_invoice(db: AsyncSession, txn_id: str, invoice_id: str | None 
     return _to_dict(txn, attachments, cat_name, acc_name, to_acc_name)
 
 
-async def skip_invoice(db: AsyncSession, txn_id: str) -> dict | None:
+async def skip_invoice(db: AsyncSession, txn_id: str) -> Optional[dict]:
     txn = await db.get(Transaction, txn_id)
     if not txn:
         return None
@@ -366,7 +374,7 @@ async def skip_invoice(db: AsyncSession, txn_id: str) -> dict | None:
     return _to_dict(txn, attachments, cat_name, acc_name, to_acc_name)
 
 
-async def confirm_tax(db: AsyncSession, txn_id: str, tax_period: str) -> dict | None:
+async def confirm_tax(db: AsyncSession, txn_id: str, tax_period: str) -> Optional[dict]:
     txn = await db.get(Transaction, txn_id)
     if not txn:
         return None
@@ -384,7 +392,7 @@ async def confirm_tax(db: AsyncSession, txn_id: str, tax_period: str) -> dict | 
     return _to_dict(txn, attachments, cat_name, acc_name, to_acc_name)
 
 
-async def get_pending_payments(db: AsyncSession) -> list[dict]:
+async def get_pending_payments(db: AsyncSession) -> List[dict]:
     result = await db.execute(
         select(Transaction)
         .where(Transaction.payment_confirmed == False)
@@ -400,7 +408,7 @@ async def get_pending_payments(db: AsyncSession) -> list[dict]:
     return items
 
 
-async def get_pending_invoices(db: AsyncSession) -> list[dict]:
+async def get_pending_invoices(db: AsyncSession) -> List[dict]:
     result = await db.execute(
         select(Transaction)
         .where(and_(Transaction.invoice_needed == True, Transaction.invoice_completed == False))
@@ -416,7 +424,7 @@ async def get_pending_invoices(db: AsyncSession) -> list[dict]:
     return items
 
 
-async def get_pending_taxes(db: AsyncSession) -> list[dict]:
+async def get_pending_taxes(db: AsyncSession) -> List[dict]:
     result = await db.execute(
         select(Transaction)
         .where(Transaction.tax_declared == False)

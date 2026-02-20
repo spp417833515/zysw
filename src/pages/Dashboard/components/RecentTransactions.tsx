@@ -71,6 +71,7 @@ const RecentTransactions: React.FC = () => {
   return (
     <Card
       title="最近交易"
+      size="small"
       extra={<Link to="/transaction">查看全部</Link>}
     >
       <Table

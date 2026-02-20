@@ -1,3 +1,4 @@
+from typing import Optional
 from pydantic import BaseModel
 
 
@@ -12,10 +13,10 @@ class BudgetCreate(BaseModel):
 
 
 class BudgetUpdate(BaseModel):
-    name: str | None = None
-    categoryId: str | None = None
-    amount: float | None = None
-    period: str | None = None
-    startDate: str | None = None
-    endDate: str | None = None
-    alertThreshold: float | None = None
+    name: Optional[str] = None
+    categoryId: Optional[str] = None
+    amount: Optional[float] = None
+    period: Optional[str] = None
+    startDate: Optional[str] = None
+    endDate: Optional[str] = None
+    alertThreshold: Optional[float] = None

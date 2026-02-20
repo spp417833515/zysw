@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from typing import Optional, List
 
 from sqlalchemy import select, func, and_
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -40,7 +41,7 @@ async def _calc_spent(db: AsyncSession, category_id: str, start_date: str, end_d
     return float(result.scalar() or 0.0)
 
 
-async def get_budgets(db: AsyncSession) -> list[dict]:
+async def get_budgets(db: AsyncSession) -> List[dict]:
     result = await db.execute(select(Budget).order_by(Budget.created_at))
     budgets = result.scalars().all()
     items = []
@@ -73,7 +74,7 @@ async def create_budget(db: AsyncSession, data: BudgetCreate) -> dict:
     return _to_dict(budget, cat_name)
 
 
-async def update_budget(db: AsyncSession, budget_id: str, data: BudgetUpdate) -> dict | None:
+async def update_budget(db: AsyncSession, budget_id: str, data: BudgetUpdate) -> Optional[dict]:
     budget = await db.get(Budget, budget_id)
     if not budget:
         return None

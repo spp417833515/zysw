@@ -202,7 +202,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
         />
       </Form.Item>
 
-      {transactionType === 'income' && (
+      {transactionType !== 'transfer' && (
         <>
           <Card size="small" style={{ marginBottom: 16 }}>
             <Form.Item
@@ -223,21 +223,23 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
             </Form.Item>
           </Card>
 
-          <Card size="small" style={{ marginBottom: 16 }}>
-            <Form.Item
-              name="companyAccountDate"
-              label="公户入账日期"
-            >
-              <DatePicker style={{ width: '100%' }} placeholder="请选择公户入账日期" />
-            </Form.Item>
-            <Form.Item
-              name="companyAccountImages"
-              label="公户入账截图"
-              style={{ marginBottom: 0 }}
-            >
-              <ImageUpload maxCount={5} />
-            </Form.Item>
-          </Card>
+          {transactionType === 'income' && (
+            <Card size="small" style={{ marginBottom: 16 }}>
+              <Form.Item
+                name="companyAccountDate"
+                label="公户入账日期"
+              >
+                <DatePicker style={{ width: '100%' }} placeholder="请选择公户入账日期" />
+              </Form.Item>
+              <Form.Item
+                name="companyAccountImages"
+                label="公户入账截图"
+                style={{ marginBottom: 0 }}
+              >
+                <ImageUpload maxCount={5} />
+              </Form.Item>
+            </Card>
+          )}
         </>
       )}
 

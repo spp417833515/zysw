@@ -5,22 +5,22 @@ class ProfitLossReport(BaseModel):
     totalIncome: float
     totalExpense: float
     netProfit: float
-    incomeByCategory: list[dict]
-    expenseByCategory: list[dict]
+    incomeByCategory: List[dict]
+    expenseByCategory: List[dict]
 
 
 class CashFlowReport(BaseModel):
     inflow: float
     outflow: float
     netFlow: float
-    byAccount: list[dict]
-    byMonth: list[dict]
+    byAccount: List[dict]
+    byMonth: List[dict]
 
 
 class CategoryReport(BaseModel):
-    categories: list[dict]
+    categories: List[dict]
     total: float
 
 
 class TrendReport(BaseModel):
-    months: list[dict]
+    months: List[dict]

@@ -1,5 +1,5 @@
-import React, { useCallback, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useCallback, useState, useMemo } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { message } from 'antd';
 import { useTransactionStore } from '@/store/useTransactionStore';
 import PageContainer from '@/components/PageContainer';
@@ -9,6 +9,7 @@ import type { IncomeRecordFormValues } from './components/IncomeRecordForm';
 
 const IncomeRecord: React.FC = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const addTransaction = useTransactionStore((s) => s.addTransaction);
   const [loading, setLoading] = useState(false);
   const [followUp, setFollowUp] = useState<{
@@ -20,6 +21,24 @@ const IncomeRecord: React.FC = () => {
 
   const [formKey, setFormKey] = useState(0);
 
+  // 从URL参数获取交易类型，默认为income
+  const transactionType = useMemo(() => {
+    const type = searchParams.get('type');
+    return type === 'expense' || type === 'transfer' ? type : 'income';
+  }, [searchParams]);
+
+  // 根据类型显示不同的标题
+  const pageTitle = useMemo(() => {
+    switch (transactionType) {
+      case 'expense':
+        return '记一笔支出';
+      case 'transfer':
+        return '转账';
+      default:
+        return '记一笔收入';
+    }
+  }, [transactionType]);
+
   const handleSubmit = useCallback(
     async (values: IncomeRecordFormValues) => {
       setLoading(true);
@@ -29,18 +48,20 @@ const IncomeRecord: React.FC = () => {
         const invoiceIssued = invoiceImages.length > 0;
 
         const txData = {
-          type: 'income' as const,
+          type: transactionType as 'income' | 'expense' | 'transfer',
           amount: values.amount,
           date: values.date.format('YYYY-MM-DD'),
           categoryId: values.categoryId,
           accountId: values.accountId,
+          toAccountId: values.toAccountId || null,
           description: values.description || '',
           tags: [],
           attachments: [],
           bookId: 'default',
-          paymentConfirmed: false,
-          paymentAccountType: null,
-          invoiceNeeded: true,
+          paymentConfirmed: values.paymentAccountType === 'company',
+          paymentAccountType: values.paymentAccountType || null,
+          payerName: values.payerName || null,
+          invoiceNeeded: transactionType !== 'transfer',
           invoiceCompleted: invoiceIssued,
           taxDeclared: false,
           invoiceIssued,
@@ -65,7 +86,7 @@ const IncomeRecord: React.FC = () => {
         setLoading(false);
       }
     },
-    [addTransaction],
+    [addTransaction, transactionType],
   );
 
   const handleCancel = useCallback(() => {
@@ -81,9 +102,10 @@ const IncomeRecord: React.FC = () => {
   }, []);
 
   return (
-    <PageContainer title="记一笔收入">
+    <PageContainer title={pageTitle}>
       <IncomeRecordForm
         key={formKey}
+        transactionType={transactionType}
         onSubmit={handleSubmit}
         onCancel={handleCancel}
         loading={loading}

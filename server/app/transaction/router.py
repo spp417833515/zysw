@@ -1,3 +1,4 @@
+from typing import Optional
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -37,14 +38,14 @@ async def pending_taxes(db: AsyncSession = Depends(get_db)):
 async def list_transactions(
     page: int = Query(1, ge=1),
     pageSize: int = Query(20, ge=1, le=100),
-    type: str | None = None,
-    categoryId: str | None = None,
-    accountId: str | None = None,
-    dateStart: str | None = None,
-    dateEnd: str | None = None,
-    keyword: str | None = None,
-    amountMin: float | None = None,
-    amountMax: float | None = None,
+    type: Optional[str] = None,
+    categoryId: Optional[str] = None,
+    accountId: Optional[str] = None,
+    dateStart: Optional[str] = None,
+    dateEnd: Optional[str] = None,
+    keyword: Optional[str] = None,
+    amountMin: Optional[float] = None,
+    amountMax: Optional[float] = None,
     db: AsyncSession = Depends(get_db),
 ):
     result = await service.get_transactions(

@@ -21,6 +21,9 @@ const WorkflowProgress: React.FC<WorkflowProgressProps> = ({ transaction }) => {
   const [taxModalOpen, setTaxModalOpen] = useState(false);
 
   const isTransfer = transaction.type === 'transfer';
+  const isIncome = transaction.type === 'income';
+  const isPersonalPay = transaction.paymentAccountType === 'personal';
+  const paymentStepTitle = isIncome ? '到账确认' : isPersonalPay ? '待报销' : '支出确认';
 
   const getStepStatus = (done: boolean, applicable: boolean) => {
     if (!applicable) return 'finish' as const;
@@ -47,12 +50,12 @@ const WorkflowProgress: React.FC<WorkflowProgressProps> = ({ transaction }) => {
       description: formatDate(transaction.createdAt),
     },
     {
-      title: '到账确认',
+      title: paymentStepTitle,
       status: getStepStatus(transaction.paymentConfirmed, true),
       icon: getStepIcon(transaction.paymentConfirmed, true),
       description: transaction.paymentConfirmed ? (
         <Space direction="vertical" size={0}>
-          <span>{transaction.paymentAccountType === 'company' ? '公户' : '私户'}</span>
+          <span>{isIncome ? (transaction.paymentAccountType === 'company' ? '公户到账' : '私户到账') : isPersonalPay ? '已报销' : '已支出'}</span>
           <span style={{ fontSize: 12, color: '#999' }}>
             {transaction.paymentConfirmedAt && formatDate(transaction.paymentConfirmedAt)}
           </span>

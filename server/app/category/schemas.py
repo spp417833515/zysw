@@ -1,3 +1,4 @@
+from typing import Optional, List
 from pydantic import BaseModel
 
 
@@ -6,17 +7,17 @@ class CategoryCreate(BaseModel):
     type: str
     icon: str = ""
     color: str = ""
-    parentId: str | None = None
+    parentId: Optional[str] = None
     sort: int = 0
 
 
 class CategoryUpdate(BaseModel):
-    name: str | None = None
-    type: str | None = None
-    icon: str | None = None
-    color: str | None = None
-    parentId: str | None = None
-    sort: int | None = None
+    name: Optional[str] = None
+    type: Optional[str] = None
+    icon: Optional[str] = None
+    color: Optional[str] = None
+    parentId: Optional[str] = None
+    sort: Optional[int] = None
 
 
 class CategoryOut(BaseModel):
@@ -25,7 +26,7 @@ class CategoryOut(BaseModel):
     type: str
     icon: str
     color: str
-    parentId: str | None
+    parentId: Optional[str]
     sort: int
     createdAt: str
-    children: list["CategoryOut"] = []
+    children: List["CategoryOut"] = []

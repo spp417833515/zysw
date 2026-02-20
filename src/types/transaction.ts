@@ -24,6 +24,7 @@ export interface Transaction {
   // Workflow fields
   paymentConfirmed: boolean;
   paymentAccountType: PaymentAccountType | null;
+  payerName?: string;
   paymentConfirmedAt?: string;
 
   invoiceNeeded: boolean;
@@ -39,6 +40,10 @@ export interface Transaction {
   invoiceImages?: Attachment[];
   companyAccountDate?: string;
   companyAccountImages?: Attachment[];
+
+  // Reimbursement fields
+  reimbursementBatchId?: string;
+  reimbursementStatus?: 'pending' | 'completed' | null;
 }
 
 export interface Attachment {

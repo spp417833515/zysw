@@ -7,6 +7,7 @@ export interface RouteMeta {
 export const routeMetas: Record<string, RouteMeta> = {
   '/': { title: '仪表盘', icon: 'DashboardOutlined' },
   '/transaction': { title: '收支流水', icon: 'TransactionOutlined' },
+  '/transaction/add': { title: '记一笔', hideInMenu: true },
   '/transaction/create': { title: '新增交易', hideInMenu: true },
   '/transaction/:id': { title: '交易详情', hideInMenu: true },
   '/account': { title: '账户管理', icon: 'BankOutlined' },
@@ -22,5 +23,6 @@ export const routeMetas: Record<string, RouteMeta> = {
   '/tasks': { title: '待办任务', icon: 'BellOutlined' },
   '/invoice': { title: '发票管理', icon: 'FileTextOutlined' },
   '/invoice/create': { title: '新增发票', hideInMenu: true },
+  '/reimbursement': { title: '报销管理', icon: 'WalletOutlined' },
   '/settings': { title: '系统设置', icon: 'SettingOutlined' },
 };

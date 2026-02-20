@@ -1,5 +1,6 @@
 import json
 from datetime import datetime, timezone
+from typing import Optional, List
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -33,12 +34,12 @@ def _to_dict(inv: Invoice) -> dict:
     }
 
 
-async def get_invoices(db: AsyncSession) -> list[dict]:
+async def get_invoices(db: AsyncSession) -> List[dict]:
     result = await db.execute(select(Invoice).order_by(Invoice.issue_date.desc()))
     return [_to_dict(inv) for inv in result.scalars().all()]
 
 
-async def get_invoice_by_id(db: AsyncSession, invoice_id: str) -> dict | None:
+async def get_invoice_by_id(db: AsyncSession, invoice_id: str) -> Optional[dict]:
     inv = await db.get(Invoice, invoice_id)
     return _to_dict(inv) if inv else None
 
@@ -69,7 +70,7 @@ async def create_invoice(db: AsyncSession, data: InvoiceCreate) -> dict:
     return _to_dict(inv)
 
 
-async def update_invoice(db: AsyncSession, invoice_id: str, data: InvoiceUpdate) -> dict | None:
+async def update_invoice(db: AsyncSession, invoice_id: str, data: InvoiceUpdate) -> Optional[dict]:
     inv = await db.get(Invoice, invoice_id)
     if not inv:
         return None

@@ -1,28 +1,65 @@
-import React from 'react';
-import { Card, Form, Input, Button, message, Divider } from 'antd';
+import React, { useEffect, useState } from 'react';
+import { Card, Form, Input, Button, message, Divider, Spin } from 'antd';
 import { SaveOutlined } from '@ant-design/icons';
+import { getCompanyInfo, saveCompanyInfo, type CompanyInfo } from '@/api/settings';
 
 const CompanyInfoForm: React.FC = () => {
   const [form] = Form.useForm();
+  const [loading, setLoading] = useState(false);
+  const [fetching, setFetching] = useState(true);
 
-  const onFinish = (values: Record<string, string>) => {
-    console.log('Company info:', values);
-    message.success('企业信息保存成功');
+  // 加载企业信息
+  useEffect(() => {
+    const loadCompanyInfo = async () => {
+      try {
+        setFetching(true);
+        const response = await getCompanyInfo();
+        if (response.data) {
+          form.setFieldsValue(response.data);
+        }
+      } catch (error) {
+        // 静默处理加载失败
+      } finally {
+        setFetching(false);
+      }
+    };
+
+    loadCompanyInfo();
+  }, [form]);
+
+  const onFinish = async (values: CompanyInfo) => {
+    try {
+      setLoading(true);
+      await saveCompanyInfo(values);
+      message.success('企业信息保存成功');
+    } catch {
+      message.error('保存失败，请重试');
+    } finally {
+      setLoading(false);
+    }
   };
 
+  if (fetching) {
+    return (
+      <div style={{ textAlign: 'center', padding: '40px 0' }}>
+        <Spin tip="加载中..." />
+      </div>
+    );
+  }
+
   return (
-    <Card title="企业信息" style={{ marginBottom: 24 }}>
+    <Card bordered={false}>
       <Form
         form={form}
         layout="vertical"
         onFinish={onFinish}
         initialValues={{
-          companyName: '示例科技有限公司',
-          taxNumber: '91110000MA87654321',
-          address: '北京市朝阳区xxx路xxx号',
-          phone: '010-12345678',
-          bankName: '中国工商银行北京分行',
-          bankAccount: '6222 0000 0000 0000 000',
+          companyName: '',
+          taxNumber: '',
+          address: '',
+          phone: '',
+          bankName: '',
+          bankAccount: '',
         }}
         style={{ maxWidth: 600 }}
       >
@@ -46,7 +83,7 @@ const CompanyInfoForm: React.FC = () => {
           <Input placeholder="请输入银行账号" />
         </Form.Item>
         <Form.Item>
-          <Button type="primary" htmlType="submit" icon={<SaveOutlined />}>
+          <Button type="primary" htmlType="submit" icon={<SaveOutlined />} loading={loading}>
             保存信息
           </Button>
         </Form.Item>

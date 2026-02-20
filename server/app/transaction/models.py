@@ -26,6 +26,7 @@ class Transaction(Base):
     # Workflow fields
     payment_confirmed: Mapped[bool] = mapped_column(Boolean, default=False)
     payment_account_type: Mapped[Optional[str]] = mapped_column(String(20), nullable=True, default=None)
+    payer_name: Mapped[Optional[str]] = mapped_column(String(100), nullable=True, default=None)
     payment_confirmed_at: Mapped[Optional[str]] = mapped_column(String(30), nullable=True, default=None)
 
     invoice_needed: Mapped[bool] = mapped_column(Boolean, default=True)
@@ -35,6 +36,10 @@ class Transaction(Base):
     tax_declared: Mapped[bool] = mapped_column(Boolean, default=False)
     tax_declared_at: Mapped[Optional[str]] = mapped_column(String(30), nullable=True, default=None)
     tax_period: Mapped[Optional[str]] = mapped_column(String(20), nullable=True, default=None)
+
+    # Reimbursement fields
+    reimbursement_batch_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True, default=None)
+    reimbursement_status: Mapped[Optional[str]] = mapped_column(String(20), nullable=True, default=None)
 
     # Income record fields
     invoice_issued: Mapped[bool] = mapped_column(Boolean, default=False)

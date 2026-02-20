@@ -1,3 +1,4 @@
+from typing import Optional, List
 from pydantic import BaseModel
 
 
@@ -23,26 +24,26 @@ class InvoiceCreate(BaseModel):
     buyerTaxNumber: str = ""
     sellerName: str = ""
     sellerTaxNumber: str = ""
-    items: list[InvoiceItemSchema] = []
-    transactionId: str | None = None
-    imageUrl: str | None = None
+    items: List[InvoiceItemSchema] = []
+    transactionId: Optional[str] = None
+    imageUrl: Optional[str] = None
     status: str = "pending"
 
 
 class InvoiceUpdate(BaseModel):
-    code: str | None = None
-    number: str | None = None
-    type: str | None = None
-    direction: str | None = None
-    amount: float | None = None
-    taxAmount: float | None = None
-    totalAmount: float | None = None
-    issueDate: str | None = None
-    buyerName: str | None = None
-    buyerTaxNumber: str | None = None
-    sellerName: str | None = None
-    sellerTaxNumber: str | None = None
-    items: list[InvoiceItemSchema] | None = None
-    transactionId: str | None = None
-    imageUrl: str | None = None
-    status: str | None = None
+    code: Optional[str] = None
+    number: Optional[str] = None
+    type: Optional[str] = None
+    direction: Optional[str] = None
+    amount: Optional[float] = None
+    taxAmount: Optional[float] = None
+    totalAmount: Optional[float] = None
+    issueDate: Optional[str] = None
+    buyerName: Optional[str] = None
+    buyerTaxNumber: Optional[str] = None
+    sellerName: Optional[str] = None
+    sellerTaxNumber: Optional[str] = None
+    items: Optional[List[InvoiceItemSchema]] = None
+    transactionId: Optional[str] = None
+    imageUrl: Optional[str] = None
+    status: Optional[str] = None

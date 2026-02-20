@@ -9,7 +9,7 @@ const ThemeSetting: React.FC = () => {
   const setThemeMode = useAppStore((s) => s.setThemeMode);
 
   return (
-    <Card title="主题设置" style={{ marginBottom: 24 }}>
+    <Card bordered={false}>
       <Typography.Paragraph type="secondary">
         选择界面显示主题，支持浅色、深色和跟随系统设置。
       </Typography.Paragraph>

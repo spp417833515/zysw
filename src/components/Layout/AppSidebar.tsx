@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Layout, Menu, Badge } from 'antd';
 import { useNavigate, useLocation } from 'react-router-dom';
 import {
@@ -12,6 +12,7 @@ import {
   SettingOutlined,
   BellOutlined,
   ScheduleOutlined,
+  WalletOutlined,
 } from '@ant-design/icons';
 import { useAppStore } from '@/store/useAppStore';
 import {
@@ -21,6 +22,7 @@ import {
   usePendingTaxes,
 } from '@/store/useTransactionStore';
 import { useRecurringExpenseStore } from '@/store/useRecurringExpenseStore';
+import { useReimbursementStore } from '@/store/useReimbursementStore';
 import { computeReminders, computeRecurringReminders } from '@/utils/reminder';
 
 const { Sider } = Layout;
@@ -31,9 +33,10 @@ const AppSidebar: React.FC = () => {
   const pendingTaxes = usePendingTaxes();
   const transactions = useTransactionStore((s) => s.transactions);
   const recurringItems = useRecurringExpenseStore((s) => s.items);
-  const overdueCount = computeReminders(transactions).length;
-  const recurringCount = computeRecurringReminders(recurringItems).length;
-  const totalPending = pendingPayments.length + pendingInvoices.length + pendingTaxes.length + overdueCount + recurringCount;
+  const pendingReimbursementCount = useReimbursementStore((s) => s.pendingCount);
+  const overdueCount = useMemo(() => computeReminders(transactions).length, [transactions]);
+  const recurringCount = useMemo(() => computeRecurringReminders(recurringItems).length, [recurringItems]);
+  const totalPending = pendingPayments.length + pendingInvoices.length + pendingTaxes.length + overdueCount + recurringCount + pendingReimbursementCount;
 
   const menuItems = [
     { key: '/', icon: <DashboardOutlined />, label: '仪表盘' },
@@ -54,6 +57,7 @@ const AppSidebar: React.FC = () => {
     { key: '/recurring-expense', icon: <ScheduleOutlined />, label: '月固定开销' },
     { key: '/report', icon: <BarChartOutlined />, label: '报表中心' },
     { key: '/invoice', icon: <FileTextOutlined />, label: '发票管理' },
+    { key: '/reimbursement', icon: <WalletOutlined />, label: '报销管理' },
     { key: '/settings', icon: <SettingOutlined />, label: '系统设置' },
   ];
   const navigate = useNavigate();
@@ -97,7 +101,7 @@ const AppSidebar: React.FC = () => {
       <Menu
         theme="dark"
         mode="inline"
-        selectedKeys={[selectedKey === '/' ? '/' : selectedKey]}
+        selectedKeys={[selectedKey]}
         items={menuItems}
         onClick={({ key }) => navigate(key)}
       />

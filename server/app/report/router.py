@@ -1,3 +1,4 @@
+from typing import Optional
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -32,7 +33,7 @@ async def cash_flow(
 async def category_report(
     startDate: str = Query(...),
     endDate: str = Query(...),
-    type: str | None = None,
+    type: Optional[str] = None,
     db: AsyncSession = Depends(get_db),
 ):
     data = await service.get_category_report(db, startDate, endDate, type)

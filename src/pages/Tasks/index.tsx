@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Tabs, Card, Row, Col, Statistic, Table, Button, Space, Tag } from 'antd';
 import {
   DollarOutlined,
@@ -11,7 +11,8 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import PageContainer from '@/components/PageContainer';
 import {
   useTransactionStore,
-  usePendingPayments,
+  usePendingIncomePayments,
+  usePendingExpensePayments,
   usePendingInvoices,
   usePendingTaxes,
 } from '@/store/useTransactionStore';
@@ -20,6 +21,7 @@ import { TRANSACTION_TYPE_MAP } from '@/utils/constants';
 import { formatDate } from '@/utils/format';
 import { computeReminders, computeRecurringReminders, REMINDER_TYPE_LABELS } from '@/utils/reminder';
 import type { ReminderItem, RecurringReminderItem } from '@/utils/reminder';
+import { useThemeToken } from '@/hooks/useThemeToken';
 import AmountText from '@/components/AmountText';
 import PaymentConfirmModal from './components/PaymentConfirmModal';
 import InvoiceConfirmModal from './components/InvoiceConfirmModal';
@@ -29,16 +31,18 @@ import TransactionDetailModal from '@/pages/Transaction/components/TransactionDe
 const Tasks: React.FC = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const defaultTab = searchParams.get('tab') || 'payment';
+  const defaultTab = searchParams.get('tab') || 'income-payment';
   const [activeTab, setActiveTab] = useState(defaultTab);
 
   const { fetchTransactions, transactions } = useTransactionStore();
   const { fetchItems: fetchRecurring, items: recurringItems } = useRecurringExpenseStore();
-  const pendingPayments = usePendingPayments();
+  const { colors } = useThemeToken();
+  const pendingIncomePayments = usePendingIncomePayments();
+  const pendingExpensePayments = usePendingExpensePayments();
   const pendingInvoices = usePendingInvoices();
   const pendingTaxes = usePendingTaxes();
-  const reminders = computeReminders(transactions);
-  const recurringReminders = computeRecurringReminders(recurringItems);
+  const reminders = useMemo(() => computeReminders(transactions), [transactions]);
+  const recurringReminders = useMemo(() => computeRecurringReminders(recurringItems), [recurringItems]);
 
   const [paymentModalOpen, setPaymentModalOpen] = useState(false);
   const [invoiceModalOpen, setInvoiceModalOpen] = useState(false);
@@ -92,92 +96,36 @@ const Tasks: React.FC = () => {
     },
   ];
 
-  const paymentColumns = [
+  const makeActionColumn = (label: string, onAction: (record: any) => void) => ({
+    title: '操作',
+    key: 'action',
+    width: 160,
+    render: (_: unknown, record: any) => (
+      <Space>
+        <Button type="primary" size="small" onClick={() => onAction(record)}>{label}</Button>
+        <Button size="small" onClick={() => setDetailId(record.id)}>详情</Button>
+      </Space>
+    ),
+  });
+
+  const incomePaymentColumns = [
     ...baseColumns,
-    {
-      title: '操作',
-      key: 'action',
-      width: 160,
-      render: (_: unknown, record: any) => (
-        <Space>
-          <Button
-            type="primary"
-            size="small"
-            onClick={() => {
-              setCurrentTxId(record.id);
-              setPaymentModalOpen(true);
-            }}
-          >
-            确认到账
-          </Button>
-          <Button
-            size="small"
-            onClick={() => setDetailId(record.id)}
-          >
-            详情
-          </Button>
-        </Space>
-      ),
-    },
+    makeActionColumn('确认到账', (r) => { setCurrentTxId(r.id); setPaymentModalOpen(true); }),
+  ];
+
+  const expensePaymentColumns = [
+    ...baseColumns,
+    makeActionColumn('确认支出', (r) => { setCurrentTxId(r.id); setPaymentModalOpen(true); }),
   ];
 
   const invoiceColumns = [
     ...baseColumns,
-    {
-      title: '操作',
-      key: 'action',
-      width: 160,
-      render: (_: unknown, record: any) => (
-        <Space>
-          <Button
-            type="primary"
-            size="small"
-            onClick={() => {
-              setCurrentTxId(record.id);
-              setInvoiceModalOpen(true);
-            }}
-          >
-            确认开票
-          </Button>
-          <Button
-            size="small"
-            onClick={() => setDetailId(record.id)}
-          >
-            详情
-          </Button>
-        </Space>
-      ),
-    },
+    makeActionColumn('确认开票', (r) => { setCurrentTxId(r.id); setInvoiceModalOpen(true); }),
   ];
 
   const taxColumns = [
     ...baseColumns,
-    {
-      title: '操作',
-      key: 'action',
-      width: 160,
-      render: (_: unknown, record: any) => (
-        <Space>
-          <Button
-            type="primary"
-            size="small"
-            onClick={() => {
-              setCurrentTxId(record.id);
-              setCurrentTxDate(record.date);
-              setTaxModalOpen(true);
-            }}
-          >
-            确认申报
-          </Button>
-          <Button
-            size="small"
-            onClick={() => setDetailId(record.id)}
-          >
-            详情
-          </Button>
-        </Space>
-      ),
-    },
+    makeActionColumn('确认申报', (r) => { setCurrentTxId(r.id); setCurrentTxDate(r.date); setTaxModalOpen(true); }),
   ];
 
   const overdueColumns = [
@@ -301,13 +249,26 @@ const Tasks: React.FC = () => {
 
   const tabItems = [
     {
-      key: 'payment',
-      label: `待确认到账 (${pendingPayments.length})`,
+      key: 'income-payment',
+      label: `待到账 (${pendingIncomePayments.length})`,
       children: (
         <Table
           rowKey="id"
-          columns={paymentColumns}
-          dataSource={pendingPayments}
+          columns={incomePaymentColumns}
+          dataSource={pendingIncomePayments}
+          pagination={{ pageSize: 10 }}
+          size="middle"
+        />
+      ),
+    },
+    {
+      key: 'expense-payment',
+      label: `待支出 (${pendingExpensePayments.length})`,
+      children: (
+        <Table
+          rowKey="id"
+          columns={expensePaymentColumns}
+          dataSource={pendingExpensePayments}
           pagination={{ pageSize: 10 }}
           size="middle"
         />
@@ -370,58 +331,68 @@ const Tasks: React.FC = () => {
   return (
     <PageContainer title="待办任务">
       <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
-        <Col xs={12} sm={5}>
+        <Col xs={12} sm={4}>
           <Card>
             <Statistic
-              title="待确认到账"
-              value={pendingPayments.length}
+              title="待到账"
+              value={pendingIncomePayments.length}
               suffix="笔"
               prefix={<DollarOutlined />}
-              valueStyle={{ color: '#faad14' }}
+              valueStyle={{ color: colors.warning }}
             />
           </Card>
         </Col>
-        <Col xs={12} sm={5}>
+        <Col xs={12} sm={4}>
+          <Card>
+            <Statistic
+              title="待支出"
+              value={pendingExpensePayments.length}
+              suffix="笔"
+              prefix={<DollarOutlined />}
+              valueStyle={{ color: colors.expense }}
+            />
+          </Card>
+        </Col>
+        <Col xs={12} sm={4}>
           <Card>
             <Statistic
               title="待开票"
               value={pendingInvoices.length}
               suffix="笔"
               prefix={<FileTextOutlined />}
-              valueStyle={{ color: '#1890ff' }}
+              valueStyle={{ color: colors.info }}
             />
           </Card>
         </Col>
-        <Col xs={12} sm={5}>
+        <Col xs={12} sm={4}>
           <Card>
             <Statistic
               title="待申报"
               value={pendingTaxes.length}
               suffix="笔"
               prefix={<AuditOutlined />}
-              valueStyle={{ color: '#f5222d' }}
+              valueStyle={{ color: colors.expense }}
             />
           </Card>
         </Col>
-        <Col xs={12} sm={5}>
+        <Col xs={12} sm={4}>
           <Card>
             <Statistic
               title="超时提醒"
               value={reminders.length}
               suffix="项"
               prefix={<ClockCircleOutlined />}
-              valueStyle={{ color: '#ff4d4f' }}
+              valueStyle={{ color: colors.expense }}
             />
           </Card>
         </Col>
-        <Col xs={24} sm={4}>
-          <Card>
+        <Col xs={24} sm={4}>          <Card>
             <Statistic
               title="固定开销"
               value={recurringReminders.length}
               suffix="项"
               prefix={<ScheduleOutlined />}
-              valueStyle={{ color: '#722ed1' }}
+              valueStyle={{ color: colors.primary }}
             />
           </Card>
         </Col>

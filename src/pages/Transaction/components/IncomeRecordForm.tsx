@@ -7,6 +7,7 @@ import {
   Space,
   Card,
   Typography,
+  Radio,
 } from 'antd';
 import AmountInput from '@/components/AmountInput';
 import AccountSelect from '@/components/AccountSelect';
@@ -21,35 +22,47 @@ export interface IncomeRecordFormValues {
   date: any; // dayjs
   amount: number;
   accountId: string;
+  toAccountId?: string; // 转账目标账户
   categoryId: string;
   description: string;
   invoiceImages?: Attachment[];
   companyAccountDate?: any; // dayjs
   companyAccountImages?: Attachment[];
+  paymentAccountType?: 'company' | 'personal';
+  payerName?: string;
 }
 
 interface IncomeRecordFormProps {
+  transactionType?: 'income' | 'expense' | 'transfer';
   onSubmit: (values: IncomeRecordFormValues) => void;
   onCancel: () => void;
   loading?: boolean;
 }
 
 const IncomeRecordForm: React.FC<IncomeRecordFormProps> = ({
+  transactionType = 'income',
   onSubmit,
   onCancel,
   loading,
 }) => {
   const [form] = Form.useForm<IncomeRecordFormValues>();
+  const paymentAccountType = Form.useWatch('paymentAccountType', form);
 
-  const handleFinish = (values: IncomeRecordFormValues) => {
-    onSubmit(values);
-  };
+  // 根据类型显示不同的文本
+  const amountLabel = transactionType === 'income' ? '收入金额（含税）' :
+                      transactionType === 'expense' ? '支出金额' : '转账金额';
+  const amountPlaceholder = transactionType === 'income' ? '请输入收入金额' :
+                            transactionType === 'expense' ? '请输入支出金额' : '请输入转账金额';
+  const accountLabel = transactionType === 'income' ? '入账账户' :
+                       transactionType === 'expense' ? '支出账户' : '转出账户';
+  const categoryLabel = transactionType === 'income' ? '收入分类' : '支出分类';
+  const categoryType = transactionType === 'transfer' ? 'expense' : transactionType;
 
   return (
     <Form
       form={form}
       layout="vertical"
-      onFinish={handleFinish}
+      onFinish={onSubmit}
       initialValues={{
         description: '',
         invoiceImages: [],
@@ -68,61 +81,99 @@ const IncomeRecordForm: React.FC<IncomeRecordFormProps> = ({
         </Form.Item>
 
         <Form.Item
-          label="收入金额（含税）"
+          label={amountLabel}
           name="amount"
-          rules={[{ required: true, message: '请输入收入金额' }]}
+          rules={[{ required: true, message: `请输入${amountLabel}` }]}
         >
-          <AmountInput placeholder="请输入收入金额" />
+          <AmountInput placeholder={amountPlaceholder} />
         </Form.Item>
 
         <Form.Item
-          label="入账账户"
+          label={accountLabel}
           name="accountId"
-          rules={[{ required: true, message: '请选择入账账户' }]}
+          rules={[{ required: true, message: `请选择${accountLabel}` }]}
         >
-          <AccountSelect placeholder="请选择入账账户" />
+          <AccountSelect placeholder={`请选择${accountLabel}`} />
         </Form.Item>
 
-        <Form.Item
-          label="收入分类"
-          name="categoryId"
-          rules={[{ required: true, message: '请选择收入分类' }]}
-        >
-          <CategorySelect type="income" placeholder="请选择收入分类" />
-        </Form.Item>
+        {transactionType === 'transfer' && (
+          <Form.Item
+            label="转入账户"
+            name="toAccountId"
+            rules={[{ required: true, message: '请选择转入账户' }]}
+          >
+            <AccountSelect placeholder="请选择转入账户" />
+          </Form.Item>
+        )}
+
+        {transactionType !== 'transfer' && (
+          <Form.Item
+            label={categoryLabel}
+            name="categoryId"
+            rules={[{ required: true, message: `请选择${categoryLabel}` }]}
+          >
+            <CategorySelect type={categoryType} placeholder={`请选择${categoryLabel}`} />
+          </Form.Item>
+        )}
 
         <Form.Item label="备注" name="description">
           <TextArea rows={3} placeholder="请输入备注信息（选填）" maxLength={500} showCount />
         </Form.Item>
       </Card>
 
-      {/* 发票 — 选填，上传了即视为发票已完成 */}
-      <Card style={{ marginBottom: 16 }}>
-        <Title level={5} style={{ marginTop: 0 }}>
-          发票 <Text type="secondary" style={{ fontSize: 12, fontWeight: 'normal' }}>选填，上传发票即视为已完成；未上传将生成待办提醒</Text>
-        </Title>
-        <Form.Item label="上传发票（PDF 或图片）" name="invoiceImages">
-          <ImageUpload
-            maxCount={5}
-            accept="image/*,.pdf,application/pdf"
-            label="上传发票"
-          />
-        </Form.Item>
-      </Card>
+      {/* 付款方式 — 仅支出显示 */}
+      {transactionType === 'expense' && (
+        <Card style={{ marginBottom: 16 }}>
+          <Title level={5} style={{ marginTop: 0 }}>付款方式</Title>
+          <Form.Item name="paymentAccountType" initialValue="company">
+            <Radio.Group>
+              <Radio value="company">公司付款</Radio>
+              <Radio value="personal">员工代付</Radio>
+            </Radio.Group>
+          </Form.Item>
+          {paymentAccountType === 'personal' && (
+            <Form.Item
+              name="payerName"
+              label="代付人姓名"
+              rules={[{ required: true, message: '请输入代付人姓名' }]}
+            >
+              <Input placeholder="请输入代付人姓名" />
+            </Form.Item>
+          )}
+        </Card>
+      )}
 
-      {/* 公户入账 — 选填，未填则进入待办 */}
-      <Card style={{ marginBottom: 16 }}>
-        <Title level={5} style={{ marginTop: 0 }}>
-          公户入账 <Text type="secondary" style={{ fontSize: 12, fontWeight: 'normal' }}>选填，未填写将生成待办提醒</Text>
-        </Title>
-        <Form.Item label="公户入账日期" name="companyAccountDate">
-          <DatePicker style={{ width: '100%' }} placeholder="请选择公户入账日期" />
-        </Form.Item>
+      {/* 发票 — 选填，上传了即视为发票已完成（仅收入和支出显示） */}
+      {transactionType !== 'transfer' && (
+        <Card style={{ marginBottom: 16 }}>
+          <Title level={5} style={{ marginTop: 0 }}>
+            发票 <Text type="secondary" style={{ fontSize: 12, fontWeight: 'normal' }}>选填，上传发票即视为已完成；未上传将生成待办提醒</Text>
+          </Title>
+          <Form.Item label="上传发票（PDF 或图片）" name="invoiceImages">
+            <ImageUpload
+              maxCount={5}
+              accept="image/*,.pdf,application/pdf"
+              label="上传发票"
+            />
+          </Form.Item>
+        </Card>
+      )}
 
-        <Form.Item label="公户入账截图" name="companyAccountImages">
-          <ImageUpload maxCount={5} />
-        </Form.Item>
-      </Card>
+      {/* 公户入账 — 选填，未填则进入待办（仅收入显示） */}
+      {transactionType === 'income' && (
+        <Card style={{ marginBottom: 16 }}>
+          <Title level={5} style={{ marginTop: 0 }}>
+            公户入账 <Text type="secondary" style={{ fontSize: 12, fontWeight: 'normal' }}>选填，未填写将生成待办提醒</Text>
+          </Title>
+          <Form.Item label="公户入账日期" name="companyAccountDate">
+            <DatePicker style={{ width: '100%' }} placeholder="请选择公户入账日期" />
+          </Form.Item>
+
+          <Form.Item label="公户入账截图" name="companyAccountImages">
+            <ImageUpload maxCount={5} />
+          </Form.Item>
+        </Card>
+      )}
 
       {/* 提交按钮 */}
       <Card>

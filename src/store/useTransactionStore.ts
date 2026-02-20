@@ -120,10 +120,31 @@ export const useTransactionStore = create<TransactionState>((set) => ({
 }));
 
 // Computed selectors (useShallow prevents infinite re-renders from .filter())
+// 收入：待到账
+export const usePendingIncomePayments = () =>
+  useTransactionStore(
+    useShallow((s) =>
+      s.transactions.filter((t) => t.type === 'income' && !t.paymentConfirmed),
+    ),
+  );
+
+// 支出：待支出（包含员工代付未报销的）
+export const usePendingExpensePayments = () =>
+  useTransactionStore(
+    useShallow((s) =>
+      s.transactions.filter(
+        (t) => t.type === 'expense' && !t.paymentConfirmed,
+      ),
+    ),
+  );
+
+// 兼容旧引用：所有待确认（收入待到账 + 支出待支出，不含员工代付）
 export const usePendingPayments = () =>
   useTransactionStore(
     useShallow((s) =>
-      s.transactions.filter((t) => !t.paymentConfirmed),
+      s.transactions.filter(
+        (t) => !t.paymentConfirmed && t.type !== 'transfer' && t.paymentAccountType !== 'personal',
+      ),
     ),
   );
 

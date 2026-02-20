@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from typing import Optional, Union, List, Dict
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -22,9 +23,9 @@ def _to_dict(cat: Category) -> dict:
     }
 
 
-def _build_tree(items: list[dict]) -> list[dict]:
-    by_id: dict[str, dict] = {}
-    roots: list[dict] = []
+def _build_tree(items: List[dict]) -> List[dict]:
+    by_id: Dict[str, dict] = {}
+    roots: List[dict] = []
     for item in items:
         item["children"] = []
         by_id[item["id"]] = item
@@ -37,7 +38,7 @@ def _build_tree(items: list[dict]) -> list[dict]:
     return roots
 
 
-async def get_categories(db: AsyncSession) -> list[dict]:
+async def get_categories(db: AsyncSession) -> List[dict]:
     result = await db.execute(select(Category).order_by(Category.sort, Category.created_at))
     items = [_to_dict(c) for c in result.scalars().all()]
     return _build_tree(items)
@@ -60,7 +61,7 @@ async def create_category(db: AsyncSession, data: CategoryCreate) -> dict:
     return result
 
 
-async def update_category(db: AsyncSession, category_id: str, data: CategoryUpdate) -> dict | None:
+async def update_category(db: AsyncSession, category_id: str, data: CategoryUpdate) -> Optional[dict]:
     cat = await db.get(Category, category_id)
     if not cat:
         return None
@@ -76,7 +77,7 @@ async def update_category(db: AsyncSession, category_id: str, data: CategoryUpda
     return result
 
 
-async def delete_category(db: AsyncSession, category_id: str) -> bool | str:
+async def delete_category(db: AsyncSession, category_id: str) -> Union[bool, str]:
     cat = await db.get(Category, category_id)
     if not cat:
         return False

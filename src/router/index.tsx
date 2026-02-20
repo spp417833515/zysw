@@ -35,6 +35,7 @@ const router = createBrowserRouter([
       { path: 'tasks', element: lazyLoad(() => import('@/pages/Tasks')) },
       { path: 'invoice', element: lazyLoad(() => import('@/pages/Invoice')) },
       { path: 'invoice/create', element: lazyLoad(() => import('@/pages/Invoice/InvoiceCreate')) },
+      { path: 'reimbursement', element: lazyLoad(() => import('@/pages/Reimbursement')) },
       { path: 'settings', element: lazyLoad(() => import('@/pages/Settings')) },
       { path: '*', element: lazyLoad(() => import('@/pages/NotFound')) },
     ],

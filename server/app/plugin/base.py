@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Any, Callable
+from typing import Any, Callable, Dict, List
 
 from fastapi import FastAPI
 
@@ -14,8 +14,8 @@ class PluginBase(ABC):
 
 class PluginRegistry:
     def __init__(self) -> None:
-        self._plugins: dict[str, PluginBase] = {}
-        self._subscribers: dict[str, list[Callable]] = {}
+        self._plugins: Dict[str, PluginBase] = {}
+        self._subscribers: Dict[str, List[Callable]] = {}
 
     def register(self, plugin: PluginBase, app: FastAPI) -> None:
         self._plugins[plugin.name] = plugin

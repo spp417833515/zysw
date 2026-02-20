@@ -3,6 +3,7 @@ import type { RecurringExpense } from '@/types/recurringExpense';
 
 export type ReminderType =
   | 'payment_overdue'
+  | 'expense_overdue'
   | 'invoice_overdue'
   | 'company_account_overdue'
   | 'recurring_upcoming'
@@ -32,6 +33,7 @@ const THRESHOLDS = { warning: 3, danger: 7 };
 
 const LABELS: Record<string, string> = {
   payment_overdue: '到账未确认',
+  expense_overdue: '支出未确认',
   invoice_overdue: '发票未开具',
   company_account_overdue: '公户未到账',
   recurring_upcoming: '固定开销即将到期',
@@ -58,14 +60,29 @@ export function computeReminders(transactions: Transaction[]): ReminderItem[] {
   for (const tx of transactions) {
     const days = daysSince(tx.date);
 
-    // 1. 到账未确认超时
-    if (!tx.paymentConfirmed) {
+    // 1. 收入：到账未确认超时
+    if (tx.type === 'income' && !tx.paymentConfirmed) {
       const level = getLevel(days);
       if (level) {
         reminders.push({
           transactionId: tx.id,
           type: 'payment_overdue',
           label: LABELS.payment_overdue,
+          daysPassed: days,
+          level,
+          transaction: tx,
+        });
+      }
+    }
+
+    // 1b. 支出：支出未确认超时（排除员工代付，走报销流程）
+    if (tx.type === 'expense' && !tx.paymentConfirmed && tx.paymentAccountType !== 'personal') {
+      const level = getLevel(days);
+      if (level) {
+        reminders.push({
+          transactionId: tx.id,
+          type: 'expense_overdue' as ReminderType,
+          label: LABELS.expense_overdue,
           daysPassed: days,
           level,
           transaction: tx,

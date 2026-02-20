@@ -12,7 +12,7 @@ const BackupRestore: React.FC = () => {
   };
 
   return (
-    <Card title="数据备份与恢复" style={{ marginBottom: 24 }}>
+    <Card bordered={false}>
       <Typography.Paragraph type="secondary">
         定期备份数据可以防止意外数据丢失。建议每周至少备份一次。
       </Typography.Paragraph>
