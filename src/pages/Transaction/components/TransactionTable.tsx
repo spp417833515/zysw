@@ -61,8 +61,7 @@ interface TransactionTableProps {
 }
 
 const TransactionTable: React.FC<TransactionTableProps> = ({ onViewDetail }) => {
-  const { transactions, loading, filter, updateTransaction } = useTransactionStore();
-  const [currentPage, setCurrentPage] = useState(1);
+  const { transactions, loading, total, page, fetchTransactions, updateTransaction } = useTransactionStore();
   const [previewImages, setPreviewImages] = useState<Attachment[]>([]);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [uploadTarget, setUploadTarget] = useState<{
@@ -72,47 +71,16 @@ const TransactionTable: React.FC<TransactionTableProps> = ({ onViewDetail }) => 
   } | null>(null);
   const [uploadFiles, setUploadFiles] = useState<Attachment[]>([]);
 
-  // Apply client-side filter
-  const filteredTransactions = useMemo(() => {
-    let list = transactions;
-
-    if (filter.type) {
-      list = list.filter((t) => t.type === filter.type);
-    }
-    if (filter.categoryId) {
-      list = list.filter((t) => t.categoryId === filter.categoryId);
-    }
-    if (filter.accountId) {
-      list = list.filter((t) => t.accountId === filter.accountId || t.toAccountId === filter.accountId);
-    }
-    if (filter.dateRange && filter.dateRange.length === 2) {
-      const [start, end] = filter.dateRange;
-      list = list.filter((t) => t.date >= start && t.date <= end);
-    }
-    if (filter.keyword) {
-      const kw = filter.keyword.toLowerCase();
-      list = list.filter(
-        (t) =>
-          (t.description && t.description.toLowerCase().includes(kw)) ||
-          (t.categoryName && t.categoryName.toLowerCase().includes(kw)) ||
-          (t.accountName && t.accountName.toLowerCase().includes(kw)) ||
-          (t.tags && t.tags.some((tag) => tag.toLowerCase().includes(kw))),
-      );
-    }
-
-    return list;
-  }, [transactions, filter]);
-
-  // Summary statistics
+  // Summary statistics (current page)
   const stats = useMemo(() => {
-    const income = filteredTransactions
+    const income = transactions
       .filter((t) => t.type === 'income')
       .reduce((sum, t) => sum + t.amount, 0);
-    const expense = filteredTransactions
+    const expense = transactions
       .filter((t) => t.type === 'expense')
       .reduce((sum, t) => sum + t.amount, 0);
-    return { income, expense, balance: income - expense, count: filteredTransactions.length };
-  }, [filteredTransactions]);
+    return { income, expense, balance: income - expense, count: total };
+  }, [transactions, total]);
 
   const openPreview = useCallback((items: Attachment[]) => {
     if (!items || items.length === 0) return;
@@ -152,9 +120,9 @@ const TransactionTable: React.FC<TransactionTableProps> = ({ onViewDetail }) => 
       _filters: any,
       _sorter: SorterResult<Transaction> | SorterResult<Transaction>[],
     ) => {
-      setCurrentPage(pagination.current || 1);
+      fetchTransactions({ page: pagination.current || 1 });
     },
-    [],
+    [fetchTransactions],
   );
 
   const columns: ColumnsType<Transaction> = [
@@ -196,6 +164,14 @@ const TransactionTable: React.FC<TransactionTableProps> = ({ onViewDetail }) => 
           {text || '-'}
         </Tooltip>
       ),
+    },
+    {
+      title: '客户/供应商',
+      dataIndex: 'contactName',
+      key: 'contactName',
+      width: 110,
+      ellipsis: true,
+      render: (v: string) => v || '-',
     },
     {
       title: '金额',
@@ -320,17 +296,17 @@ const TransactionTable: React.FC<TransactionTableProps> = ({ onViewDetail }) => 
 
       <Table<Transaction>
         columns={columns}
-        dataSource={filteredTransactions}
+        dataSource={transactions}
         rowKey="id"
         loading={loading}
         onChange={handleTableChange}
         pagination={{
-          current: currentPage,
+          current: page,
           pageSize: PAGE_SIZE,
-          total: filteredTransactions.length,
+          total,
           showSizeChanger: false,
           showQuickJumper: true,
-          showTotal: (total) => `共 ${total} 条记录`,
+          showTotal: (t) => `共 ${t} 条记录`,
         }}
         locale={{
           emptyText: <EmptyState description="暂无交易记录" />,

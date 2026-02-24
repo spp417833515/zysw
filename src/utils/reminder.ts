@@ -6,6 +6,7 @@ export type ReminderType =
   | 'expense_overdue'
   | 'invoice_overdue'
   | 'company_account_overdue'
+  | 'collection_overdue'
   | 'recurring_upcoming'
   | 'recurring_overdue';
 
@@ -36,6 +37,7 @@ const LABELS: Record<string, string> = {
   expense_overdue: '支出未确认',
   invoice_overdue: '发票未开具',
   company_account_overdue: '公户未到账',
+  collection_overdue: '应收催款',
   recurring_upcoming: '固定开销即将到期',
   recurring_overdue: '固定开销已到扣款日',
 };
@@ -122,6 +124,18 @@ export function computeReminders(transactions: Transaction[]): ReminderItem[] {
           transaction: tx,
         });
       }
+    }
+
+    // 4. 应收催款：收入未到账超过30天且有客户
+    if (tx.type === 'income' && !tx.paymentConfirmed && tx.contactId && days >= 30) {
+      reminders.push({
+        transactionId: tx.id,
+        type: 'collection_overdue',
+        label: LABELS.collection_overdue,
+        daysPassed: days,
+        level: days >= 60 ? 'danger' : 'warning',
+        transaction: tx,
+      });
     }
   }
 

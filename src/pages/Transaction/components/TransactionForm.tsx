@@ -17,6 +17,7 @@ import { TRANSACTION_TYPE_MAP } from '@/utils/constants';
 import AmountInput from '@/components/AmountInput';
 import CategorySelect from '@/components/CategorySelect';
 import AccountSelect from '@/components/AccountSelect';
+import ContactSelect from '@/components/ContactSelect';
 import ImageUpload from '@/components/ImageUpload';
 import dayjs from 'dayjs';
 
@@ -178,6 +179,15 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
           showCount
         />
       </Form.Item>
+
+      {transactionType !== 'transfer' && (
+        <Form.Item name="contactId" label={transactionType === 'income' ? '客户' : '供应商'}>
+          <ContactSelect
+            contactType={transactionType === 'income' ? 'customer' : 'vendor'}
+            placeholder={transactionType === 'income' ? '请选择客户（选填）' : '请选择供应商（选填）'}
+          />
+        </Form.Item>
+      )}
 
       <Form.Item
         name="tags"

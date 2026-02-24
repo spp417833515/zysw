@@ -38,6 +38,7 @@ from app.budget import models as _budget_models  # noqa: F401, E402
 from app.recurring_expense import models as _recurring_expense_models  # noqa: F401, E402
 from app.settings import models as _settings_models  # noqa: F401, E402
 from app.reimbursement import models as _reimbursement_models  # noqa: F401, E402
+from app.contact import models as _contact_models  # noqa: F401, E402
 
 # Register routers
 from app.account.router import router as account_router  # noqa: E402
@@ -50,6 +51,7 @@ from app.recurring_expense.router import router as recurring_expense_router  # n
 from app.upload.router import router as upload_router  # noqa: E402
 from app.settings.router import router as settings_router  # noqa: E402
 from app.reimbursement.router import router as reimbursement_router  # noqa: E402
+from app.contact.router import router as contact_router  # noqa: E402
 
 app.include_router(account_router)
 app.include_router(category_router)
@@ -61,6 +63,7 @@ app.include_router(recurring_expense_router)
 app.include_router(upload_router)
 app.include_router(settings_router)
 app.include_router(reimbursement_router)
+app.include_router(contact_router)
 
 # Serve uploaded files
 app.mount("/uploads", StaticFiles(directory=str(UPLOAD_DIR)), name="uploads")

@@ -5,6 +5,7 @@ import { useTransactionStore } from '@/store/useTransactionStore';
 import { TRANSACTION_TYPE_MAP } from '@/utils/constants';
 import CategorySelect from '@/components/CategorySelect';
 import AccountSelect from '@/components/AccountSelect';
+import ContactSelect from '@/components/ContactSelect';
 import DateRangeFilter from '@/components/DateRangeFilter';
 
 const TransactionFilter: React.FC = () => {
@@ -27,6 +28,13 @@ const TransactionFilter: React.FC = () => {
   const handleAccountChange = useCallback(
     (accountId: string) => {
       setFilter({ accountId: accountId || undefined });
+    },
+    [setFilter],
+  );
+
+  const handleContactChange = useCallback(
+    (contactId: string) => {
+      setFilter({ contactId: contactId || undefined });
     },
     [setFilter],
   );
@@ -61,7 +69,7 @@ const TransactionFilter: React.FC = () => {
           </Space>
         </Col>
 
-        <Col xs={24} sm={12} md={6} lg={5}>
+        <Col xs={24} sm={12} md={6} lg={4}>
           <CategorySelect
             value={filter.categoryId}
             onChange={handleCategoryChange}
@@ -70,7 +78,7 @@ const TransactionFilter: React.FC = () => {
           />
         </Col>
 
-        <Col xs={24} sm={12} md={6} lg={5}>
+        <Col xs={24} sm={12} md={6} lg={4}>
           <AccountSelect
             value={filter.accountId}
             onChange={handleAccountChange}
@@ -79,13 +87,22 @@ const TransactionFilter: React.FC = () => {
           />
         </Col>
 
-        <Col xs={24} sm={12} md={6} lg={5}>
+        <Col xs={24} sm={12} md={6} lg={4}>
+          <ContactSelect
+            value={filter.contactId}
+            onChange={handleContactChange}
+            placeholder="选择客户/供应商"
+            style={{ width: '100%' }}
+          />
+        </Col>
+
+        <Col xs={24} sm={12} md={6} lg={4}>
           <DateRangeFilter
             onChange={handleDateRangeChange}
           />
         </Col>
 
-        <Col xs={24} sm={12} md={6} lg={5}>
+        <Col xs={24} sm={12} md={6} lg={4}>
           <Input
             placeholder="搜索描述/标签"
             prefix={<SearchOutlined />}
@@ -98,7 +115,7 @@ const TransactionFilter: React.FC = () => {
 
         <Col xs={24} sm={12} md={6} lg={4}>
           <Button icon={<ReloadOutlined />} onClick={resetFilter}>
-            重置筛选
+            重置
           </Button>
         </Col>
       </Row>

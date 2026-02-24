@@ -1,25 +1,19 @@
 import React from 'react';
-import { message } from 'antd';
 import ExportButton from '@/components/ExportButton';
+import type { ExportColumn } from '@/utils/export';
 
 interface ReportExportButtonProps {
   title: string;
   data: any[];
+  columns?: ExportColumn[];
 }
 
-const ReportExportButton: React.FC<ReportExportButtonProps> = ({ title, data }) => {
-  const handleExportExcel = () => {
-    message.info(`${title} Excel 导出功能将在后续版本实现（共 ${data.length} 条数据）`);
-  };
-
-  const handleExportPDF = () => {
-    message.info(`${title} PDF 导出功能将在后续版本实现（共 ${data.length} 条数据）`);
-  };
-
+const ReportExportButton: React.FC<ReportExportButtonProps> = ({ title, data, columns = [] }) => {
   return (
     <ExportButton
-      onExportExcel={handleExportExcel}
-      onExportPDF={handleExportPDF}
+      data={data}
+      columns={columns}
+      fileName={title}
     />
   );
 };

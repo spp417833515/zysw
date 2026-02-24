@@ -53,14 +53,14 @@ const IncomeRecord: React.FC = () => {
           date: values.date.format('YYYY-MM-DD'),
           categoryId: values.categoryId,
           accountId: values.accountId,
-          toAccountId: values.toAccountId || null,
+          toAccountId: values.toAccountId || undefined,
           description: values.description || '',
           tags: [],
           attachments: [],
           bookId: 'default',
           paymentConfirmed: values.paymentAccountType === 'company',
-          paymentAccountType: values.paymentAccountType || null,
-          payerName: values.payerName || null,
+          paymentAccountType: values.paymentAccountType || undefined,
+          payerName: values.payerName || undefined,
           invoiceNeeded: transactionType !== 'transfer',
           invoiceCompleted: invoiceIssued,
           taxDeclared: false,
@@ -68,11 +68,11 @@ const IncomeRecord: React.FC = () => {
           invoiceImages,
           companyAccountDate: values.companyAccountDate
             ? values.companyAccountDate.format('YYYY-MM-DD')
-            : null,
+            : undefined,
           companyAccountImages: values.companyAccountImages ?? [],
         };
 
-        const created = await addTransaction(txData);
+        const created = await addTransaction(txData as any);
 
         setFollowUp({
           open: true,

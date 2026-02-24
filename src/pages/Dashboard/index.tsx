@@ -14,15 +14,16 @@ import TaxDeadlineReminder from './components/TaxDeadlineReminder';
 import QuarterlyTaxBudget from './components/QuarterlyTaxBudget';
 
 const Dashboard: React.FC = () => {
-  const { fetchTransactions } = useTransactionStore();
+  const { fetchTransactions, fetchPendingData } = useTransactionStore();
   const { fetchAccounts } = useAccountStore();
   const { fetchItems: fetchRecurring } = useRecurringExpenseStore();
 
   useEffect(() => {
     fetchTransactions();
+    fetchPendingData();
     fetchAccounts();
     fetchRecurring();
-  }, [fetchTransactions, fetchAccounts, fetchRecurring]);
+  }, [fetchTransactions, fetchPendingData, fetchAccounts, fetchRecurring]);
 
   return (
     <PageContainer title="仪表盘">

@@ -12,6 +12,7 @@ import {
 import AmountInput from '@/components/AmountInput';
 import AccountSelect from '@/components/AccountSelect';
 import CategorySelect from '@/components/CategorySelect';
+import ContactSelect from '@/components/ContactSelect';
 import ImageUpload from '@/components/ImageUpload';
 import type { Attachment } from '@/types/transaction';
 
@@ -23,6 +24,7 @@ export interface IncomeRecordFormValues {
   amount: number;
   accountId: string;
   toAccountId?: string; // 转账目标账户
+  contactId?: string;
   categoryId: string;
   description: string;
   invoiceImages?: Attachment[];
@@ -119,6 +121,15 @@ const IncomeRecordForm: React.FC<IncomeRecordFormProps> = ({
         <Form.Item label="备注" name="description">
           <TextArea rows={3} placeholder="请输入备注信息（选填）" maxLength={500} showCount />
         </Form.Item>
+
+        {transactionType !== 'transfer' && (
+          <Form.Item label={transactionType === 'income' ? '客户' : '供应商'} name="contactId">
+            <ContactSelect
+              contactType={transactionType === 'income' ? 'customer' : 'vendor'}
+              placeholder={transactionType === 'income' ? '请选择客户（选填）' : '请选择供应商（选填）'}
+            />
+          </Form.Item>
+        )}
       </Card>
 
       {/* 付款方式 — 仅支出显示 */}

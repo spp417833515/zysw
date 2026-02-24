@@ -13,6 +13,7 @@ import {
   BellOutlined,
   ScheduleOutlined,
   WalletOutlined,
+  TeamOutlined,
 } from '@ant-design/icons';
 import { useAppStore } from '@/store/useAppStore';
 import {
@@ -58,6 +59,7 @@ const AppSidebar: React.FC = () => {
     { key: '/report', icon: <BarChartOutlined />, label: '报表中心' },
     { key: '/invoice', icon: <FileTextOutlined />, label: '发票管理' },
     { key: '/reimbursement', icon: <WalletOutlined />, label: '报销管理' },
+    { key: '/contact', icon: <TeamOutlined />, label: '客户/供应商' },
     { key: '/settings', icon: <SettingOutlined />, label: '系统设置' },
   ];
   const navigate = useNavigate();

@@ -1,8 +1,7 @@
 import request from './request';
-import type { Transaction, TransactionFilter } from '@/types/transaction';
-import type { PaginationParams } from '@/types/common';
+import type { Transaction } from '@/types/transaction';
 
-export function getTransactions(params?: PaginationParams & TransactionFilter) {
+export function getTransactions(params?: Record<string, any>) {
   return request.get('/transactions', { params });
 }
 
@@ -49,4 +48,8 @@ export function getPendingInvoices() {
 
 export function getPendingTaxes() {
   return request.get('/transactions/pending/taxes');
+}
+
+export function batchCreateTransactions(items: Partial<Transaction>[]) {
+  return request.post('/transactions/batch', { items });
 }

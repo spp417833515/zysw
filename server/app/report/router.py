@@ -48,3 +48,21 @@ async def trend_report(
 ):
     data = await service.get_trend_report(db, startDate, endDate)
     return success(data)
+
+
+@router.get("/receivables")
+async def receivables(db: AsyncSession = Depends(get_db)):
+    data = await service.get_receivables(db)
+    return success(data)
+
+
+@router.get("/payables")
+async def payables(db: AsyncSession = Depends(get_db)):
+    data = await service.get_payables(db)
+    return success(data)
+
+
+@router.get("/aging")
+async def aging(type: Optional[str] = "receivable", db: AsyncSession = Depends(get_db)):
+    data = await service.get_aging_analysis(db, type or "receivable")
+    return success(data)

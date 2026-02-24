@@ -34,14 +34,14 @@ const Tasks: React.FC = () => {
   const defaultTab = searchParams.get('tab') || 'income-payment';
   const [activeTab, setActiveTab] = useState(defaultTab);
 
-  const { fetchTransactions, transactions } = useTransactionStore();
+  const { fetchPendingData, pendingPayments } = useTransactionStore();
   const { fetchItems: fetchRecurring, items: recurringItems } = useRecurringExpenseStore();
   const { colors } = useThemeToken();
   const pendingIncomePayments = usePendingIncomePayments();
   const pendingExpensePayments = usePendingExpensePayments();
   const pendingInvoices = usePendingInvoices();
   const pendingTaxes = usePendingTaxes();
-  const reminders = useMemo(() => computeReminders(transactions), [transactions]);
+  const reminders = useMemo(() => computeReminders(pendingPayments), [pendingPayments]);
   const recurringReminders = useMemo(() => computeRecurringReminders(recurringItems), [recurringItems]);
 
   const [paymentModalOpen, setPaymentModalOpen] = useState(false);
@@ -52,9 +52,9 @@ const Tasks: React.FC = () => {
   const [detailId, setDetailId] = useState<string | null>(null);
 
   useEffect(() => {
-    fetchTransactions();
+    fetchPendingData();
     fetchRecurring();
-  }, [fetchTransactions, fetchRecurring]);
+  }, [fetchPendingData, fetchRecurring]);
 
   const baseColumns = [
     {

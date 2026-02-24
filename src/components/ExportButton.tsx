@@ -2,30 +2,30 @@ import React from 'react';
 import { Button, Dropdown } from 'antd';
 import { DownloadOutlined } from '@ant-design/icons';
 import type { MenuProps } from 'antd';
-import { message } from 'antd';
+import { exportToExcel, exportToCSV } from '@/utils/export';
+import type { ExportColumn } from '@/utils/export';
 
 interface ExportButtonProps {
-  onExportExcel?: () => void;
-  onExportPDF?: () => void;
+  data?: Record<string, unknown>[];
+  columns?: ExportColumn[];
+  fileName?: string;
 }
 
-const ExportButton: React.FC<ExportButtonProps> = ({ onExportExcel, onExportPDF }) => {
+const ExportButton: React.FC<ExportButtonProps> = ({
+  data = [],
+  columns = [],
+  fileName = '导出数据',
+}) => {
   const items: MenuProps['items'] = [
     {
       key: 'excel',
       label: '导出 Excel',
-      onClick: () => {
-        onExportExcel?.();
-        message.success('Excel 导出功能将在后续版本实现');
-      },
+      onClick: () => exportToExcel(data, columns, { fileName }),
     },
     {
-      key: 'pdf',
-      label: '导出 PDF',
-      onClick: () => {
-        onExportPDF?.();
-        message.success('PDF 导出功能将在后续版本实现');
-      },
+      key: 'csv',
+      label: '导出 CSV',
+      onClick: () => exportToCSV(data, columns, { fileName }),
     },
   ];
 

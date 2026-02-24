@@ -20,9 +20,11 @@ export const routeMetas: Record<string, RouteMeta> = {
   '/report/cash-flow': { title: '现金流量表', hideInMenu: true },
   '/report/category': { title: '分类汇总', hideInMenu: true },
   '/report/trend': { title: '趋势分析', hideInMenu: true },
+  '/report/receivable-payable': { title: '应收应付', hideInMenu: true },
   '/tasks': { title: '待办任务', icon: 'BellOutlined' },
   '/invoice': { title: '发票管理', icon: 'FileTextOutlined' },
   '/invoice/create': { title: '新增发票', hideInMenu: true },
   '/reimbursement': { title: '报销管理', icon: 'WalletOutlined' },
+  '/contact': { title: '客户/供应商', icon: 'TeamOutlined' },
   '/settings': { title: '系统设置', icon: 'SettingOutlined' },
 };

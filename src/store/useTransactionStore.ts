@@ -10,19 +10,31 @@ import {
   confirmInvoice as apiConfirmInvoice,
   skipInvoice as apiSkipInvoice,
   confirmTax as apiConfirmTax,
+  getPendingPayments,
+  getPendingInvoices,
+  getPendingTaxes,
 } from '@/api/transaction';
 import { useAccountStore } from '@/store/useAccountStore';
 
 interface TransactionState {
   transactions: Transaction[];
+  total: number;
   loading: boolean;
+  page: number;
+  pageSize: number;
   filter: TransactionFilter;
   setFilter: (filter: Partial<TransactionFilter>) => void;
   resetFilter: () => void;
-  fetchTransactions: () => Promise<void>;
+  fetchTransactions: (params?: { page?: number; pageSize?: number }) => Promise<void>;
   addTransaction: (t: Omit<Transaction, 'id' | 'createdAt' | 'updatedAt'>) => Promise<Transaction>;
   updateTransaction: (id: string, t: Partial<Transaction>) => Promise<void>;
   deleteTransaction: (id: string) => Promise<void>;
+
+  // Pending data (full dataset from dedicated APIs)
+  pendingPayments: Transaction[];
+  pendingInvoicesList: Transaction[];
+  pendingTaxesList: Transaction[];
+  fetchPendingData: () => Promise<void>;
 
   // Workflow actions
   confirmPayment: (id: string, accountType: PaymentAccountType) => Promise<void>;
@@ -33,31 +45,76 @@ interface TransactionState {
 
 const defaultFilter: TransactionFilter = {};
 
-export const useTransactionStore = create<TransactionState>((set) => ({
+export const useTransactionStore = create<TransactionState>((set, get) => ({
   transactions: [],
+  total: 0,
   loading: false,
+  page: 1,
+  pageSize: 20,
   filter: defaultFilter,
-  setFilter: (filter) => set((s) => ({ filter: { ...s.filter, ...filter } })),
-  resetFilter: () => set({ filter: defaultFilter }),
+  setFilter: (filter) => {
+    set((s) => ({ filter: { ...s.filter, ...filter }, page: 1 }));
+    get().fetchTransactions({ page: 1 });
+  },
+  resetFilter: () => {
+    set({ filter: defaultFilter, page: 1 });
+    get().fetchTransactions({ page: 1 });
+  },
 
-  fetchTransactions: async () => {
-    set({ loading: true });
+  fetchTransactions: async (params) => {
+    const s = get();
+    const page = params?.page ?? s.page;
+    const pageSize = params?.pageSize ?? s.pageSize;
+    const f = s.filter;
+    set({ loading: true, page });
     try {
-      const res: any = await getTransactions();
+      const res: any = await getTransactions({
+        page,
+        pageSize,
+        type: f.type,
+        categoryId: f.categoryId,
+        accountId: f.accountId,
+        contactId: f.contactId,
+        dateStart: f.dateRange?.[0],
+        dateEnd: f.dateRange?.[1],
+        keyword: f.keyword,
+        amountMin: f.amountMin,
+        amountMax: f.amountMax,
+      });
       const data = res.data;
-      // Backend may return paginated { data, total } or plain array
       const list = Array.isArray(data) ? data : (data?.data ?? []);
-      set({ transactions: list, loading: false });
+      const total = Array.isArray(data) ? data.length : (data?.total ?? 0);
+      set({ transactions: list, total, loading: false });
     } catch {
       set({ loading: false });
     }
   },
 
+  // Pending data from dedicated APIs
+  pendingPayments: [],
+  pendingInvoicesList: [],
+  pendingTaxesList: [],
+  fetchPendingData: async () => {
+    try {
+      const [paymentsRes, invoicesRes, taxesRes]: any[] = await Promise.all([
+        getPendingPayments(),
+        getPendingInvoices(),
+        getPendingTaxes(),
+      ]);
+      set({
+        pendingPayments: paymentsRes.data ?? [],
+        pendingInvoicesList: invoicesRes.data ?? [],
+        pendingTaxesList: taxesRes.data ?? [],
+      });
+    } catch { /* ignore */ }
+  },
+
   addTransaction: async (t) => {
     const res: any = await createTransaction(t as any);
     if (res.code === 0) {
-      set((s) => ({ transactions: [res.data, ...s.transactions] }));
       useAccountStore.getState().fetchAccounts();
+      get().fetchTransactions();
+      get().fetchPendingData();
     }
     return res.data;
   },
@@ -75,10 +132,9 @@ export const useTransactionStore = create<TransactionState>((set) => ({
   deleteTransaction: async (id) => {
     const res: any = await apiDeleteTransaction(id);
     if (res.code === 0) {
-      set((s) => ({
-        transactions: s.transactions.filter((t) => t.id !== id),
-      }));
       useAccountStore.getState().fetchAccounts();
+      get().fetchTransactions();
+      get().fetchPendingData();
     }
   },
 
@@ -88,6 +144,7 @@ export const useTransactionStore = create<TransactionState>((set) => ({
       set((s) => ({
         transactions: s.transactions.map((t) => (t.id === id ? res.data : t)),
       }));
+      get().fetchPendingData();
     }
   },
 
@@ -97,6 +154,7 @@ export const useTransactionStore = create<TransactionState>((set) => ({
       set((s) => ({
         transactions: s.transactions.map((t) => (t.id === id ? res.data : t)),
       }));
+      get().fetchPendingData();
     }
   },
 
@@ -106,6 +164,7 @@ export const useTransactionStore = create<TransactionState>((set) => ({
       set((s) => ({
         transactions: s.transactions.map((t) => (t.id === id ? res.data : t)),
       }));
+      get().fetchPendingData();
     }
   },
 
@@ -115,51 +174,41 @@ export const useTransactionStore = create<TransactionState>((set) => ({
       set((s) => ({
         transactions: s.transactions.map((t) => (t.id === id ? res.data : t)),
       }));
+      get().fetchPendingData();
     }
   },
 }));
 
-// Computed selectors (useShallow prevents infinite re-renders from .filter())
-// 收入：待到账
+// Selectors — now from dedicated pending data (full dataset)
 export const usePendingIncomePayments = () =>
   useTransactionStore(
     useShallow((s) =>
-      s.transactions.filter((t) => t.type === 'income' && !t.paymentConfirmed),
+      s.pendingPayments.filter((t) => t.type === 'income'),
     ),
   );
 
-// 支出：待支出（包含员工代付未报销的）
 export const usePendingExpensePayments = () =>
   useTransactionStore(
     useShallow((s) =>
-      s.transactions.filter(
-        (t) => t.type === 'expense' && !t.paymentConfirmed,
-      ),
+      s.pendingPayments.filter((t) => t.type === 'expense'),
     ),
   );
 
-// 兼容旧引用：所有待确认（收入待到账 + 支出待支出，不含员工代付）
 export const usePendingPayments = () =>
   useTransactionStore(
     useShallow((s) =>
-      s.transactions.filter(
-        (t) => !t.paymentConfirmed && t.type !== 'transfer' && t.paymentAccountType !== 'personal',
+      s.pendingPayments.filter(
+        (t) => t.type !== 'transfer' && t.paymentAccountType !== 'personal',
       ),
     ),
   );
 
 export const usePendingInvoices = () =>
   useTransactionStore(
-    useShallow((s) =>
-      s.transactions.filter(
-        (t) => t.type !== 'transfer' && t.invoiceNeeded && !t.invoiceCompleted,
-      ),
-    ),
+    useShallow((s) => s.pendingInvoicesList),
   );
 
 export const usePendingTaxes = () =>
   useTransactionStore(
-    useShallow((s) =>
-      s.transactions.filter((t) => t.type !== 'transfer' && !t.taxDeclared),
-    ),
+    useShallow((s) => s.pendingTaxesList),
   );

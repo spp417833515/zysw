@@ -3,6 +3,7 @@ from sqlalchemy import select, func, and_, case
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.category.models import Category
+from app.contact.models import Contact
 from app.transaction.models import Transaction
 
 
@@ -193,3 +194,97 @@ async def get_trend_report(db: AsyncSession, start_date: str, end_date: str) -> 
         })
 
     return {"months": months}
+
+
+async def get_receivables(db: AsyncSession) -> dict:
+    """按客户汇总未到账收入（payment_confirmed=False, type=income）"""
+    result = await db.execute(
+        select(
+            Transaction.contact_id,
+            func.sum(Transaction.amount).label("total"),
+            func.count(Transaction.id).label("count"),
+            func.min(Transaction.date).label("earliest"),
+        )
+        .where(and_(Transaction.type == "income", Transaction.payment_confirmed == False))
+        .group_by(Transaction.contact_id)
+        .order_by(func.sum(Transaction.amount).desc())
+    )
+    items = []
+    grand_total = 0.0
+    for row in result.all():
+        contact = await db.get(Contact, row[0]) if row[0] else None
+        amount = float(row[1])
+        grand_total += amount
+        items.append({
+            "contactId": row[0] or "",
+            "contactName": contact.name if contact else "未指定客户",
+            "amount": amount,
+            "count": row[2],
+            "earliestDate": row[3],
+        })
+    return {"items": items, "total": grand_total}
+
+
+async def get_payables(db: AsyncSession) -> dict:
+    """按供应商汇总未付支出（payment_confirmed=False, type=expense）"""
+    result = await db.execute(
+        select(
+            Transaction.contact_id,
+            func.sum(Transaction.amount).label("total"),
+            func.count(Transaction.id).label("count"),
+            func.min(Transaction.date).label("earliest"),
+        )
+        .where(and_(Transaction.type == "expense", Transaction.payment_confirmed == False))
+        .group_by(Transaction.contact_id)
+        .order_by(func.sum(Transaction.amount).desc())
+    )
+    items = []
+    grand_total = 0.0
+    for row in result.all():
+        contact = await db.get(Contact, row[0]) if row[0] else None
+        amount = float(row[1])
+        grand_total += amount
+        items.append({
+            "contactId": row[0] or "",
+            "contactName": contact.name if contact else "未指定供应商",
+            "amount": amount,
+            "count": row[2],
+            "earliestDate": row[3],
+        })
+    return {"items": items, "total": grand_total}
+
+
+async def get_aging_analysis(db: AsyncSession, report_type: str = "receivable") -> dict:
+    """账龄分析: 30/60/90/120/120+天分桶"""
+    from datetime import datetime, timezone
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+    if report_type == "receivable":
+        conditions = and_(Transaction.type == "income", Transaction.payment_confirmed == False)
+    else:
+        conditions = and_(Transaction.type == "expense", Transaction.payment_confirmed == False)
+
+    result = await db.execute(
+        select(Transaction.date, Transaction.amount).where(conditions)
+    )
+
+    buckets = {"0-30": 0.0, "31-60": 0.0, "61-90": 0.0, "91-120": 0.0, "120+": 0.0}
+    for row in result.all():
+        days = (datetime.strptime(now, "%Y-%m-%d") - datetime.strptime(row[0][:10], "%Y-%m-%d")).days
+        amount = float(row[1])
+        if days <= 30:
+            buckets["0-30"] += amount
+        elif days <= 60:
+            buckets["31-60"] += amount
+        elif days <= 90:
+            buckets["61-90"] += amount
+        elif days <= 120:
+            buckets["91-120"] += amount
+        else:
+            buckets["120+"] += amount
+
+    return {
+        "type": report_type,
+        "buckets": [{"range": k, "amount": round(v, 2)} for k, v in buckets.items()],
+        "total": round(sum(buckets.values()), 2),
+    }

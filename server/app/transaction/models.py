@@ -37,6 +37,9 @@ class Transaction(Base):
     tax_declared_at: Mapped[Optional[str]] = mapped_column(String(30), nullable=True, default=None)
     tax_period: Mapped[Optional[str]] = mapped_column(String(20), nullable=True, default=None)
 
+    # Contact
+    contact_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True, default=None)
+
     # Reimbursement fields
     reimbursement_batch_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True, default=None)
     reimbursement_status: Mapped[Optional[str]] = mapped_column(String(20), nullable=True, default=None)

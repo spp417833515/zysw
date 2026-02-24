@@ -15,3 +15,15 @@ export function getCategoryReport(params: { startDate: string; endDate: string; 
 export function getTrendReport(params: { startDate: string; endDate: string }) {
   return request.get('/reports/trend', { params });
 }
+
+export function getReceivables() {
+  return request.get('/reports/receivables');
+}
+
+export function getPayables() {
+  return request.get('/reports/payables');
+}
+
+export function getAgingAnalysis(type: string = 'receivable') {
+  return request.get('/reports/aging', { params: { type } });
+}

@@ -6,6 +6,7 @@ from app.deps import get_db
 from app.response import error, success
 from app.transaction import service
 from app.transaction.schemas import (
+    BatchTransactionCreate,
     ConfirmInvoiceRequest,
     ConfirmPaymentRequest,
     ConfirmTaxRequest,
@@ -34,6 +35,12 @@ async def pending_taxes(db: AsyncSession = Depends(get_db)):
     return success(items)
 
 
+@router.post("/batch")
+async def batch_create(data: BatchTransactionCreate, db: AsyncSession = Depends(get_db)):
+    result = await service.batch_create_transactions(db, data.items)
+    return success(result)
+
+
 @router.get("")
 async def list_transactions(
     page: int = Query(1, ge=1),
@@ -41,6 +48,7 @@ async def list_transactions(
     type: Optional[str] = None,
     categoryId: Optional[str] = None,
     accountId: Optional[str] = None,
+    contactId: Optional[str] = None,
     dateStart: Optional[str] = None,
     dateEnd: Optional[str] = None,
     keyword: Optional[str] = None,
@@ -55,6 +63,7 @@ async def list_transactions(
         type_filter=type,
         category_id=categoryId,
         account_id=accountId,
+        contact_id=contactId,
         date_start=dateStart,
         date_end=dateEnd,
         keyword=keyword,

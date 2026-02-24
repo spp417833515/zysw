@@ -8,13 +8,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.account.models import Account
 from app.category.models import Category
+from app.contact.models import Contact
 from app.plugin.base import registry
 from app.transaction.models import Attachment, Transaction
 from app.transaction.schemas import TransactionCreate, TransactionUpdate
 
 
 def _to_dict(txn: Transaction, attachments: Optional[list] = None,
-             category_name: str = "", account_name: str = "", to_account_name: str = "") -> dict:
+             category_name: str = "", account_name: str = "", to_account_name: str = "",
+             contact_name: str = "") -> dict:
     return {
         "id": txn.id,
         "type": txn.type,
@@ -26,6 +28,8 @@ def _to_dict(txn: Transaction, attachments: Optional[list] = None,
         "accountName": account_name,
         "toAccountId": txn.to_account_id,
         "toAccountName": to_account_name,
+        "contactId": txn.contact_id,
+        "contactName": contact_name,
         "description": txn.description,
         "tags": json.loads(txn.tags) if txn.tags else [],
         "attachments": attachments or [],
@@ -69,6 +73,18 @@ async def _get_name(db: AsyncSession, model, obj_id: Optional[str]) -> str:
     return obj.name if obj else ""
 
 
+async def _enrich(db: AsyncSession, txn: Transaction, attachments: Optional[list] = None) -> dict:
+    if attachments is None:
+        att_result = await _get_attachments(db, txn.id)
+    else:
+        att_result = attachments
+    cat_name = await _get_name(db, Category, txn.category_id)
+    acc_name = await _get_name(db, Account, txn.account_id)
+    to_acc_name = await _get_name(db, Account, txn.to_account_id)
+    contact_name = await _get_name(db, Contact, txn.contact_id)
+    return _to_dict(txn, att_result, cat_name, acc_name, to_acc_name, contact_name)
+
+
 async def _update_balance(db: AsyncSession, txn_type: str, amount: float,
                           account_id: str, to_account_id: Optional[str], reverse: bool = False):
     multiplier = -1 if reverse else 1
@@ -93,6 +109,7 @@ async def get_transactions(
     type_filter: Optional[str] = None,
     category_id: Optional[str] = None,
     account_id: Optional[str] = None,
+    contact_id: Optional[str] = None,
     date_start: Optional[str] = None,
     date_end: Optional[str] = None,
     keyword: Optional[str] = None,
@@ -106,6 +123,8 @@ async def get_transactions(
         conditions.append(Transaction.category_id == category_id)
     if account_id:
         conditions.append(Transaction.account_id == account_id)
+    if contact_id:
+        conditions.append(Transaction.contact_id == contact_id)
     if date_start:
         conditions.append(Transaction.date >= date_start)
     if date_end:
@@ -135,11 +154,7 @@ async def get_transactions(
 
     items = []
     for txn in txns:
-        attachments = await _get_attachments(db, txn.id)
-        cat_name = await _get_name(db, Category, txn.category_id)
-        acc_name = await _get_name(db, Account, txn.account_id)
-        to_acc_name = await _get_name(db, Account, txn.to_account_id)
-        items.append(_to_dict(txn, attachments, cat_name, acc_name, to_acc_name))
+        items.append(await _enrich(db, txn))
 
     return {
         "data": items,
@@ -153,11 +168,7 @@ async def get_transaction_by_id(db: AsyncSession, txn_id: str) -> Optional[dict]
     txn = await db.get(Transaction, txn_id)
     if not txn:
         return None
-    attachments = await _get_attachments(db, txn.id)
-    cat_name = await _get_name(db, Category, txn.category_id)
-    acc_name = await _get_name(db, Account, txn.account_id)
-    to_acc_name = await _get_name(db, Account, txn.to_account_id)
-    return _to_dict(txn, attachments, cat_name, acc_name, to_acc_name)
+    return await _enrich(db, txn)
 
 
 async def create_transaction(db: AsyncSession, data: TransactionCreate) -> dict:
@@ -179,6 +190,7 @@ async def create_transaction(db: AsyncSession, data: TransactionCreate) -> dict:
         invoice_completed=data.invoiceCompleted,
         tax_declared=data.taxDeclared,
         tax_period=data.taxPeriod,
+        contact_id=data.contactId,
         invoice_issued=data.invoiceIssued,
         invoice_images=json.dumps([a.model_dump() for a in data.invoiceImages]),
         company_account_date=data.companyAccountDate,
@@ -206,13 +218,9 @@ async def create_transaction(db: AsyncSession, data: TransactionCreate) -> dict:
     await db.commit()
     await db.refresh(txn)
 
-    cat_name = await _get_name(db, Category, txn.category_id)
-    acc_name = await _get_name(db, Account, txn.account_id)
-    to_acc_name = await _get_name(db, Account, txn.to_account_id)
-
     await registry.emit("transaction.created", {"id": txn.id, "type": txn.type})
 
-    return _to_dict(txn, att_dicts, cat_name, acc_name, to_acc_name)
+    return await _enrich(db, txn, att_dicts)
 
 
 async def update_transaction(db: AsyncSession, txn_id: str, data: TransactionUpdate) -> Optional[dict]:
@@ -228,6 +236,7 @@ async def update_transaction(db: AsyncSession, txn_id: str, data: TransactionUpd
         "categoryId": "category_id",
         "accountId": "account_id",
         "toAccountId": "to_account_id",
+        "contactId": "contact_id",
         "invoiceId": "invoice_id",
         "bookId": "book_id",
         "paymentConfirmed": "payment_confirmed",
@@ -289,14 +298,9 @@ async def update_transaction(db: AsyncSession, txn_id: str, data: TransactionUpd
     await db.commit()
     await db.refresh(txn)
 
-    attachments = await _get_attachments(db, txn.id)
-    cat_name = await _get_name(db, Category, txn.category_id)
-    acc_name = await _get_name(db, Account, txn.account_id)
-    to_acc_name = await _get_name(db, Account, txn.to_account_id)
-
     await registry.emit("transaction.updated", {"id": txn.id})
 
-    return _to_dict(txn, attachments, cat_name, acc_name, to_acc_name)
+    return await _enrich(db, txn)
 
 
 async def delete_transaction(db: AsyncSession, txn_id: str) -> bool:
@@ -332,11 +336,7 @@ async def confirm_payment(db: AsyncSession, txn_id: str, account_type: str) -> O
     await db.commit()
     await db.refresh(txn)
     await registry.emit("transaction.payment_confirmed", {"id": txn_id})
-    attachments = await _get_attachments(db, txn.id)
-    cat_name = await _get_name(db, Category, txn.category_id)
-    acc_name = await _get_name(db, Account, txn.account_id)
-    to_acc_name = await _get_name(db, Account, txn.to_account_id)
-    return _to_dict(txn, attachments, cat_name, acc_name, to_acc_name)
+    return await _enrich(db, txn)
 
 
 async def confirm_invoice(db: AsyncSession, txn_id: str, invoice_id: Optional[str] = None) -> Optional[dict]:
@@ -351,11 +351,7 @@ async def confirm_invoice(db: AsyncSession, txn_id: str, invoice_id: Optional[st
     await db.commit()
     await db.refresh(txn)
     await registry.emit("transaction.invoice_confirmed", {"id": txn_id})
-    attachments = await _get_attachments(db, txn.id)
-    cat_name = await _get_name(db, Category, txn.category_id)
-    acc_name = await _get_name(db, Account, txn.account_id)
-    to_acc_name = await _get_name(db, Account, txn.to_account_id)
-    return _to_dict(txn, attachments, cat_name, acc_name, to_acc_name)
+    return await _enrich(db, txn)
 
 
 async def skip_invoice(db: AsyncSession, txn_id: str) -> Optional[dict]:
@@ -367,11 +363,7 @@ async def skip_invoice(db: AsyncSession, txn_id: str) -> Optional[dict]:
     await db.commit()
     await db.refresh(txn)
     await registry.emit("transaction.invoice_skipped", {"id": txn_id})
-    attachments = await _get_attachments(db, txn.id)
-    cat_name = await _get_name(db, Category, txn.category_id)
-    acc_name = await _get_name(db, Account, txn.account_id)
-    to_acc_name = await _get_name(db, Account, txn.to_account_id)
-    return _to_dict(txn, attachments, cat_name, acc_name, to_acc_name)
+    return await _enrich(db, txn)
 
 
 async def confirm_tax(db: AsyncSession, txn_id: str, tax_period: str) -> Optional[dict]:
@@ -385,11 +377,7 @@ async def confirm_tax(db: AsyncSession, txn_id: str, tax_period: str) -> Optiona
     await db.commit()
     await db.refresh(txn)
     await registry.emit("transaction.tax_declared", {"id": txn_id})
-    attachments = await _get_attachments(db, txn.id)
-    cat_name = await _get_name(db, Category, txn.category_id)
-    acc_name = await _get_name(db, Account, txn.account_id)
-    to_acc_name = await _get_name(db, Account, txn.to_account_id)
-    return _to_dict(txn, attachments, cat_name, acc_name, to_acc_name)
+    return await _enrich(db, txn)
 
 
 async def get_pending_payments(db: AsyncSession) -> List[dict]:
@@ -400,11 +388,7 @@ async def get_pending_payments(db: AsyncSession) -> List[dict]:
     )
     items = []
     for txn in result.scalars().all():
-        attachments = await _get_attachments(db, txn.id)
-        cat_name = await _get_name(db, Category, txn.category_id)
-        acc_name = await _get_name(db, Account, txn.account_id)
-        to_acc_name = await _get_name(db, Account, txn.to_account_id)
-        items.append(_to_dict(txn, attachments, cat_name, acc_name, to_acc_name))
+        items.append(await _enrich(db, txn))
     return items
 
 
@@ -416,11 +400,7 @@ async def get_pending_invoices(db: AsyncSession) -> List[dict]:
     )
     items = []
     for txn in result.scalars().all():
-        attachments = await _get_attachments(db, txn.id)
-        cat_name = await _get_name(db, Category, txn.category_id)
-        acc_name = await _get_name(db, Account, txn.account_id)
-        to_acc_name = await _get_name(db, Account, txn.to_account_id)
-        items.append(_to_dict(txn, attachments, cat_name, acc_name, to_acc_name))
+        items.append(await _enrich(db, txn))
     return items
 
 
@@ -432,9 +412,17 @@ async def get_pending_taxes(db: AsyncSession) -> List[dict]:
     )
     items = []
     for txn in result.scalars().all():
-        attachments = await _get_attachments(db, txn.id)
-        cat_name = await _get_name(db, Category, txn.category_id)
-        acc_name = await _get_name(db, Account, txn.account_id)
-        to_acc_name = await _get_name(db, Account, txn.to_account_id)
-        items.append(_to_dict(txn, attachments, cat_name, acc_name, to_acc_name))
+        items.append(await _enrich(db, txn))
     return items
+
+
+async def batch_create_transactions(db: AsyncSession, items_data: list) -> dict:
+    created = 0
+    errors = []
+    for i, data in enumerate(items_data):
+        try:
+            await create_transaction(db, data)
+            created += 1
+        except Exception as e:
+            errors.append({"index": i, "error": str(e)})
+    return {"created": created, "errors": errors}

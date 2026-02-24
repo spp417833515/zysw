@@ -29,10 +29,15 @@ class TransactionCreate(BaseModel):
     invoiceCompleted: bool = False
     taxDeclared: bool = False
     taxPeriod: Optional[str] = None
+    contactId: Optional[str] = None
     invoiceIssued: bool = False
     invoiceImages: List[AttachmentSchema] = []
     companyAccountDate: Optional[str] = None
     companyAccountImages: List[AttachmentSchema] = []
+
+
+class BatchTransactionCreate(BaseModel):
+    items: List[TransactionCreate]
 
 
 class TransactionUpdate(BaseModel):
@@ -54,6 +59,7 @@ class TransactionUpdate(BaseModel):
     invoiceCompleted: Optional[bool] = None
     taxDeclared: Optional[bool] = None
     taxPeriod: Optional[str] = None
+    contactId: Optional[str] = None
     invoiceIssued: Optional[bool] = None
     invoiceImages: Optional[List[AttachmentSchema]] = None
     companyAccountDate: Optional[str] = None

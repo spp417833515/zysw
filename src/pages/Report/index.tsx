@@ -5,6 +5,7 @@ import {
   FundOutlined,
   PieChartOutlined,
   RiseOutlined,
+  AccountBookOutlined,
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import PageContainer from '@/components/PageContainer';
@@ -43,6 +44,12 @@ const reportCards: ReportCardItem[] = [
     path: '/report/trend',
     icon: <RiseOutlined style={{ fontSize: 36, color: brandColor }} />,
     description: '查看收支变化趋势',
+  },
+  {
+    title: '应收应付',
+    path: '/report/receivable-payable',
+    icon: <AccountBookOutlined style={{ fontSize: 36, color: brandColor }} />,
+    description: '应收应付汇总与账龄分析',
   },
 ];
 

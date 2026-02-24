@@ -13,6 +13,8 @@ export interface Transaction {
   accountName?: string;
   toAccountId?: string;
   toAccountName?: string;
+  contactId?: string;
+  contactName?: string;
   description: string;
   tags: string[];
   attachments: Attachment[];
@@ -58,6 +60,7 @@ export interface TransactionFilter {
   type?: TransactionType;
   categoryId?: string;
   accountId?: string;
+  contactId?: string;
   dateRange?: [string, string];
   keyword?: string;
   tags?: string[];

@@ -7,6 +7,7 @@ import {
   ClockCircleOutlined,
   ScheduleOutlined,
   WalletOutlined,
+  PhoneOutlined,
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -30,11 +31,12 @@ const PendingTasks: React.FC = () => {
   const pendingExpensePayments = usePendingExpensePayments();
   const pendingInvoices = usePendingInvoices();
   const pendingTaxes = usePendingTaxes();
-  const transactions = useTransactionStore((s) => s.transactions);
+  const pendingPayments = useTransactionStore((s) => s.pendingPayments);
   const recurringItems = useRecurringExpenseStore((s) => s.items);
   const pendingReimbursementCount = useReimbursementStore((s) => s.pendingCount);
   const fetchPendingReimbursementCount = useReimbursementStore((s) => s.fetchPendingCount);
-  const reminders = computeReminders(transactions);
+  const reminders = computeReminders(pendingPayments);
+  const collectionReminders = reminders.filter((r) => r.type === 'collection_overdue');
   const recurringReminders = computeRecurringReminders(recurringItems);
 
   useEffect(() => { fetchPendingReimbursementCount(); }, []);
@@ -88,6 +90,13 @@ const PendingTasks: React.FC = () => {
       label: '待报销',
       count: pendingReimbursementCount,
       tab: 'reimbursement',
+    },
+    {
+      key: 'collection',
+      icon: <PhoneOutlined style={{ fontSize: 20, color: colors.expense }} />,
+      label: '应收催款',
+      count: collectionReminders.length,
+      tab: 'overdue',
     },
   ];
 
