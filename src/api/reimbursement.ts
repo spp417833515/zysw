@@ -21,3 +21,9 @@ export const deleteReimbursement = (id: string) =>
 
 export const getPendingReimbursementCount = () =>
   request.get<number>('/reimbursements/pending/count');
+
+export const getUnpaidReimbursements = () =>
+  request.get<{ count: number; totalAmount: number }>('/reimbursements/unpaid');
+
+export const confirmReimbursementPayment = (id: string, data: { accountId?: string }) =>
+  request.put(`/reimbursements/${id}/confirm-payment`, data);

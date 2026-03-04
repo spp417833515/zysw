@@ -1,11 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Tabs, Card, Row, Col, Statistic, Table, Button, Space, Tag } from 'antd';
+import { Tabs, Card, Row, Col, Statistic, Table, Button, Space, Tag, Typography } from 'antd';
 import {
   DollarOutlined,
   FileTextOutlined,
   AuditOutlined,
   ClockCircleOutlined,
   ScheduleOutlined,
+  PayCircleOutlined,
 } from '@ant-design/icons';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import PageContainer from '@/components/PageContainer';
@@ -18,7 +19,7 @@ import {
 } from '@/store/useTransactionStore';
 import { useRecurringExpenseStore } from '@/store/useRecurringExpenseStore';
 import { TRANSACTION_TYPE_MAP } from '@/utils/constants';
-import { formatDate } from '@/utils/format';
+import { formatDate, formatAmount } from '@/utils/format';
 import { computeReminders, computeRecurringReminders, REMINDER_TYPE_LABELS } from '@/utils/reminder';
 import type { ReminderItem, RecurringReminderItem } from '@/utils/reminder';
 import { useThemeToken } from '@/hooks/useThemeToken';
@@ -26,7 +27,10 @@ import AmountText from '@/components/AmountText';
 import PaymentConfirmModal from './components/PaymentConfirmModal';
 import InvoiceConfirmModal from './components/InvoiceConfirmModal';
 import TaxDeclareModal from './components/TaxDeclareModal';
+import SalaryConfirmModal from './components/SalaryConfirmModal';
 import TransactionDetailModal from '@/pages/Transaction/components/TransactionDetailModal';
+import { getUnpaidSalaries } from '@/api/employee';
+import type { UnpaidSalaryItem } from '@/types/employee';
 
 const Tasks: React.FC = () => {
   const navigate = useNavigate();
@@ -51,9 +55,26 @@ const Tasks: React.FC = () => {
   const [currentTxDate, setCurrentTxDate] = useState('');
   const [detailId, setDetailId] = useState<string | null>(null);
 
+  // 待开工资
+  const [unpaidItems, setUnpaidItems] = useState<UnpaidSalaryItem[]>([]);
+  const [unpaidLoading, setUnpaidLoading] = useState(false);
+  const [salaryModalOpen, setSalaryModalOpen] = useState(false);
+  const [payingItem, setPayingItem] = useState<UnpaidSalaryItem | null>(null);
+
+  const fetchUnpaid = async () => {
+    setUnpaidLoading(true);
+    try {
+      const res: any = await getUnpaidSalaries();
+      setUnpaidItems(res.data?.items ?? []);
+    } finally {
+      setUnpaidLoading(false);
+    }
+  };
+
   useEffect(() => {
     fetchPendingData();
     fetchRecurring();
+    fetchUnpaid();
   }, [fetchPendingData, fetchRecurring]);
 
   const baseColumns = [
@@ -247,7 +268,29 @@ const Tasks: React.FC = () => {
     },
   ];
 
+  const unpaidSalaryColumns = [
+    { title: '员工', dataIndex: 'employeeName', key: 'employeeName', width: 100 },
+    { title: '年份', dataIndex: 'year', key: 'year', width: 80 },
+    { title: '月份', dataIndex: 'month', key: 'month', width: 80, render: (v: number) => `${v}月` },
+    {
+      title: '应发工资', dataIndex: 'baseSalary', key: 'baseSalary', width: 120,
+      render: (v: number) => <Typography.Text type="danger">¥{formatAmount(v)}</Typography.Text>,
+    },
+    {
+      title: '操作', key: 'action', width: 120,
+      render: (_: unknown, record: UnpaidSalaryItem) => (
+        <Button
+          type="primary" danger size="small"
+          onClick={() => { setPayingItem(record); setSalaryModalOpen(true); }}
+        >
+          确认发放
+        </Button>
+      ),
+    },
+  ];
+
   const tabItems = [
+    // 资金流动
     {
       key: 'income-payment',
       label: `待到账 (${pendingIncomePayments.length})`,
@@ -275,6 +318,21 @@ const Tasks: React.FC = () => {
       ),
     },
     {
+      key: 'salary-unpaid',
+      label: `待开工资 (${unpaidItems.length})`,
+      children: (
+        <Table
+          rowKey={(r: UnpaidSalaryItem) => `${r.employeeId}-${r.year}-${r.month}`}
+          columns={unpaidSalaryColumns}
+          dataSource={unpaidItems}
+          loading={unpaidLoading}
+          pagination={{ pageSize: 10 }}
+          size="middle"
+        />
+      ),
+    },
+    // 票据
+    {
       key: 'invoice',
       label: `待开票 (${pendingInvoices.length})`,
       children: (
@@ -287,14 +345,15 @@ const Tasks: React.FC = () => {
         />
       ),
     },
+    // 周期提醒
     {
-      key: 'tax',
-      label: `待申报 (${pendingTaxes.length})`,
+      key: 'recurring',
+      label: `固定开销提醒 (${recurringReminders.length})`,
       children: (
         <Table
-          rowKey="id"
-          columns={taxColumns}
-          dataSource={pendingTaxes}
+          rowKey={(r: RecurringReminderItem) => `${r.recurringExpenseId}-${r.type}`}
+          columns={recurringColumns}
+          dataSource={recurringReminders}
           pagination={{ pageSize: 10 }}
           size="middle"
         />
@@ -313,14 +372,15 @@ const Tasks: React.FC = () => {
         />
       ),
     },
+    // 合规（低频末位）
     {
-      key: 'recurring',
-      label: `固定开销提醒 (${recurringReminders.length})`,
+      key: 'tax',
+      label: `待申报 (${pendingTaxes.length})`,
       children: (
         <Table
-          rowKey={(r: RecurringReminderItem) => `${r.recurringExpenseId}-${r.type}`}
-          columns={recurringColumns}
-          dataSource={recurringReminders}
+          rowKey="id"
+          columns={taxColumns}
+          dataSource={pendingTaxes}
           pagination={{ pageSize: 10 }}
           size="middle"
         />
@@ -331,71 +391,21 @@ const Tasks: React.FC = () => {
   return (
     <PageContainer title="待办任务">
       <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
-        <Col xs={12} sm={4}>
-          <Card>
-            <Statistic
-              title="待到账"
-              value={pendingIncomePayments.length}
-              suffix="笔"
-              prefix={<DollarOutlined />}
-              valueStyle={{ color: colors.warning }}
-            />
-          </Card>
-        </Col>
-        <Col xs={12} sm={4}>
-          <Card>
-            <Statistic
-              title="待支出"
-              value={pendingExpensePayments.length}
-              suffix="笔"
-              prefix={<DollarOutlined />}
-              valueStyle={{ color: colors.expense }}
-            />
-          </Card>
-        </Col>
-        <Col xs={12} sm={4}>
-          <Card>
-            <Statistic
-              title="待开票"
-              value={pendingInvoices.length}
-              suffix="笔"
-              prefix={<FileTextOutlined />}
-              valueStyle={{ color: colors.info }}
-            />
-          </Card>
-        </Col>
-        <Col xs={12} sm={4}>
-          <Card>
-            <Statistic
-              title="待申报"
-              value={pendingTaxes.length}
-              suffix="笔"
-              prefix={<AuditOutlined />}
-              valueStyle={{ color: colors.expense }}
-            />
-          </Card>
-        </Col>
-        <Col xs={12} sm={4}>
-          <Card>
-            <Statistic
-              title="超时提醒"
-              value={reminders.length}
-              suffix="项"
-              prefix={<ClockCircleOutlined />}
-              valueStyle={{ color: colors.expense }}
-            />
-          </Card>
-        </Col>
-        <Col xs={24} sm={4}>          <Card>
-            <Statistic
-              title="固定开销"
-              value={recurringReminders.length}
-              suffix="项"
-              prefix={<ScheduleOutlined />}
-              valueStyle={{ color: colors.primary }}
-            />
-          </Card>
-        </Col>
+        {[
+          { title: '待到账', value: pendingIncomePayments.length, suffix: '笔', icon: <DollarOutlined />, color: colors.warning },
+          { title: '待支出', value: pendingExpensePayments.length, suffix: '笔', icon: <DollarOutlined />, color: colors.expense },
+          { title: '待开工资', value: unpaidItems.length, suffix: '笔', icon: <PayCircleOutlined />, color: colors.expense },
+          { title: '待开票', value: pendingInvoices.length, suffix: '笔', icon: <FileTextOutlined />, color: colors.info },
+          { title: '固定开销', value: recurringReminders.length, suffix: '项', icon: <ScheduleOutlined />, color: colors.primary },
+          { title: '超时提醒', value: reminders.length, suffix: '项', icon: <ClockCircleOutlined />, color: colors.expense },
+          { title: '待申报', value: pendingTaxes.length, suffix: '笔', icon: <AuditOutlined />, color: colors.expense },
+        ].map((s) => (
+          <Col key={s.title} xs={12} sm={4}>
+            <Card>
+              <Statistic title={s.title} value={s.value} suffix={s.suffix} prefix={s.icon} valueStyle={{ color: s.color }} />
+            </Card>
+          </Col>
+        ))}
       </Row>
 
       <Tabs activeKey={activeTab} onChange={setActiveTab} items={tabItems} />
@@ -420,6 +430,12 @@ const Tasks: React.FC = () => {
         open={!!detailId}
         transactionId={detailId}
         onClose={() => setDetailId(null)}
+      />
+      <SalaryConfirmModal
+        open={salaryModalOpen}
+        item={payingItem}
+        onClose={() => { setSalaryModalOpen(false); setPayingItem(null); }}
+        onSuccess={fetchUnpaid}
       />
     </PageContainer>
   );

@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Optional
 
-from sqlalchemy import Float, String, Text
+from sqlalchemy import Boolean, Float, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
@@ -26,3 +26,5 @@ class ReimbursementBatch(Base):
         String(30), default=lambda: datetime.now(timezone.utc).isoformat()
     )
     completed_at: Mapped[Optional[str]] = mapped_column(String(30), nullable=True, default=None)
+    payment_confirmed: Mapped[bool] = mapped_column(Boolean, default=False)
+    payment_confirmed_at: Mapped[Optional[str]] = mapped_column(String(30), nullable=True, default=None)

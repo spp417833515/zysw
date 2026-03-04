@@ -3,7 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.deps import get_db
 from app.reimbursement import service
-from app.reimbursement.schemas import ReimbursementCreate, ReimbursementComplete
+from app.reimbursement.schemas import ReimbursementCreate, ReimbursementComplete, ReimbursementConfirmPayment
 from app.response import error, success
 
 router = APIRouter(prefix="/reimbursements", tags=["reimbursements"])
@@ -17,6 +17,11 @@ async def list_batches(db: AsyncSession = Depends(get_db)):
 @router.get("/pending/count")
 async def pending_count(db: AsyncSession = Depends(get_db)):
     return success(await service.get_pending_count(db))
+
+
+@router.get("/unpaid")
+async def unpaid_completed(db: AsyncSession = Depends(get_db)):
+    return success(await service.get_unpaid_completed(db))
 
 
 
@@ -46,3 +51,14 @@ async def delete_batch(batch_id: str, db: AsyncSession = Depends(get_db)):
     if not deleted:
         return error("报销单不存在或已完成，无法删除")
     return success(None)
+
+
+@router.put("/{batch_id}/confirm-payment")
+async def confirm_payment(batch_id: str, data: ReimbursementConfirmPayment, db: AsyncSession = Depends(get_db)):
+    try:
+        result = await service.confirm_payment(db, batch_id, data.accountId)
+    except ValueError as e:
+        return error(str(e))
+    if not result:
+        return error("报销单不存在、未完成或已打款")
+    return success(result)

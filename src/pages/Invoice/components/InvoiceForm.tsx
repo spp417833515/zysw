@@ -17,6 +17,7 @@ import {
 import { PlusOutlined, MinusCircleOutlined } from '@ant-design/icons';
 import { invoiceTypeLabels, invoiceDirectionLabels } from '@/types/invoice';
 import { formatAmount } from '@/utils/format';
+import ImageUpload from '@/components/ImageUpload';
 
 const { Text } = Typography;
 
@@ -106,10 +107,12 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({ onSubmit, onCancel }) => {
       const taxAmount = calculateItemTaxAmount(amount, item.taxRate);
       return { ...item, amount, taxAmount };
     });
+    const attachments = (values as any).attachments;
     onSubmit({
       ...values,
       items: processedItems,
-    });
+      imageUrl: attachments?.[0]?.url || null,
+    } as any);
   };
 
   return (
@@ -224,6 +227,12 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({ onSubmit, onCancel }) => {
             </Form.Item>
           </Col>
         </Row>
+      </Card>
+
+      <Card title="发票附件" size="small" style={{ marginBottom: 16 }}>
+        <Form.Item name="attachments" label="上传发票图片/PDF">
+          <ImageUpload maxCount={3} accept="image/*,.pdf" label="上传发票" />
+        </Form.Item>
       </Card>
 
       <Card title="发票明细" size="small" style={{ marginBottom: 16 }}>

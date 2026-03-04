@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Upload, message, Image } from 'antd';
 import { PlusOutlined, FilePdfOutlined } from '@ant-design/icons';
 import type { UploadFile, UploadProps } from 'antd/es/upload';
@@ -32,18 +32,41 @@ const ImageUpload: React.FC<ImageUploadProps> = ({
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewImage, setPreviewImage] = useState('');
 
-  const [fileList, setFileList] = useState<UploadFile[]>(() => {
-    if (value && value.length > 0) {
-      return value.map((att, index) => ({
-        uid: att.id || `${index}`,
-        name: att.name || `file-${index}`,
-        status: 'done' as const,
-        url: toDisplayUrl(att.url),
-        thumbUrl: isPdf(att) ? undefined : toDisplayUrl(att.url),
-      }));
+  const toFileList = (atts?: Attachment[]): UploadFile[] => {
+    if (!atts || atts.length === 0) return [];
+    return atts.map((att, index) => ({
+      uid: att.id || `${index}`,
+      name: att.name || `file-${index}`,
+      status: 'done' as const,
+      url: toDisplayUrl(att.url),
+      thumbUrl: isPdf(att) ? undefined : toDisplayUrl(att.url),
+    }));
+  };
+
+  const [fileList, setFileList] = useState<UploadFile[]>(() => toFileList(value));
+
+  // 当外部 value 变化时（如 Form.setFieldsValue），同步 fileList
+  useEffect(() => {
+    if (!value || value.length === 0) {
+      // 只在没有正在上传的文件时清空
+      if (fileList.every((f) => f.status === 'done' || !f.status)) {
+        if (fileList.length > 0 && fileList.every((f) => !f.response)) {
+          setFileList([]);
+        }
+      }
+      return;
     }
-    return [];
-  });
+    // 如果 value 和当前 fileList 的 url 不同，说明是外部设置的新值
+    const valueUrls = value.map((a) => a.url).sort().join(',');
+    const currentUrls = fileList
+      .filter((f) => f.status === 'done')
+      .map((f) => (f.url || '').replace(/^\/api/, ''))
+      .sort()
+      .join(',');
+    if (valueUrls !== currentUrls) {
+      setFileList(toFileList(value));
+    }
+  }, [value]);
 
   const handleChange: UploadProps['onChange'] = ({ fileList: newFileList }) => {
     setFileList(newFileList);

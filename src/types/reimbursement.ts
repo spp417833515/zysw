@@ -12,4 +12,7 @@ export interface ReimbursementBatch {
   completedDate?: string;
   createdAt: string;
   completedAt?: string;
+  paymentConfirmed: boolean;
+  paymentConfirmedAt?: string;
+  transactions?: { id: string; date: string; description: string; amount: number }[];
 }

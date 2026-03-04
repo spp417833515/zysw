@@ -1,9 +1,9 @@
 import React from 'react';
-import { Drawer, Table, Descriptions, Typography, Divider, Row, Col, Tag } from 'antd';
+import { Drawer, Table, Descriptions, Typography, Divider, Row, Col, Tag, Image } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import type { Invoice, InvoiceItem } from '@/types/invoice';
 import { invoiceTypeLabels, invoiceDirectionLabels } from '@/types/invoice';
-import { formatAmount, formatDate } from '@/utils/format';
+import { formatAmount, formatDate, toDisplayUrl } from '@/utils/format';
 
 const { Title, Text } = Typography;
 
@@ -246,6 +246,21 @@ const InvoicePreview: React.FC<InvoicePreviewProps> = ({
             </Tag>
           </Col>
         </Row>
+
+        {/* Invoice Image */}
+        {invoice.imageUrl && (
+          <>
+            <Divider style={{ borderColor: '#c41d1a', margin: '12px 0' }} />
+            <div>
+              <Text strong style={{ color: '#c41d1a', display: 'block', marginBottom: 8 }}>发票附件</Text>
+              {invoice.imageUrl.toLowerCase().endsWith('.pdf') ? (
+                <a href={toDisplayUrl(invoice.imageUrl)} target="_blank" rel="noopener noreferrer">查看PDF附件</a>
+              ) : (
+                <Image src={toDisplayUrl(invoice.imageUrl)} style={{ maxWidth: '100%' }} />
+              )}
+            </div>
+          </>
+        )}
       </div>
     </Drawer>
   );

@@ -166,6 +166,17 @@ const TransactionTable: React.FC<TransactionTableProps> = ({ onViewDetail }) => 
       ),
     },
     {
+      title: '报销',
+      dataIndex: 'reimbursementStatus',
+      key: 'reimbursementStatus',
+      width: 80,
+      render: (status: string | null | undefined, record: Transaction) => {
+        if (status === 'completed') return <Tag color="purple">已报销</Tag>;
+        if (status === 'pending') return <Tag color="orange">报销中</Tag>;
+        return null;
+      },
+    },
+    {
       title: '客户/供应商',
       dataIndex: 'contactName',
       key: 'contactName',
@@ -207,6 +218,7 @@ const TransactionTable: React.FC<TransactionTableProps> = ({ onViewDetail }) => 
       width: 110,
       render: (_: any, record: Transaction) => {
         const isIncome = record.type === 'income';
+        const isTransfer = record.type === 'transfer';
         const handleUpload = (target: { transactionId: string; field: VoucherField; label: string }) => {
           setUploadTarget(target);
           setUploadFiles([]);
@@ -217,17 +229,17 @@ const TransactionTable: React.FC<TransactionTableProps> = ({ onViewDetail }) => 
               count={record.attachments?.length || 0} items={record.attachments}
               field="attachments" transactionId={record.id}
               onPreview={openPreview} onUpload={handleUpload} />
+            {!isTransfer && (
+              <VoucherButton icon={<FileTextOutlined />} color="#52c41a" label="发票"
+                count={record.invoiceImages?.length || 0} items={record.invoiceImages}
+                field="invoiceImages" transactionId={record.id}
+                onPreview={openPreview} onUpload={handleUpload} />
+            )}
             {isIncome && (
-              <>
-                <VoucherButton icon={<FileTextOutlined />} color="#52c41a" label="发票"
-                  count={record.invoiceImages?.length || 0} items={record.invoiceImages}
-                  field="invoiceImages" transactionId={record.id}
-                  onPreview={openPreview} onUpload={handleUpload} />
-                <VoucherButton icon={<BankOutlined />} color="#faad14" label="公户截图"
-                  count={record.companyAccountImages?.length || 0} items={record.companyAccountImages}
-                  field="companyAccountImages" transactionId={record.id}
-                  onPreview={openPreview} onUpload={handleUpload} />
-              </>
+              <VoucherButton icon={<BankOutlined />} color="#faad14" label="公户截图"
+                count={record.companyAccountImages?.length || 0} items={record.companyAccountImages}
+                field="companyAccountImages" transactionId={record.id}
+                onPreview={openPreview} onUpload={handleUpload} />
             )}
           </Space>
         );

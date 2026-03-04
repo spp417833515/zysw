@@ -13,3 +13,7 @@ class ReimbursementComplete(BaseModel):
     actualAmount: Optional[float] = None  # 实际报销金额，不填则等于totalAmount
     fee: float = 0.0  # 手续费
     feeAccountId: Optional[str] = None  # 手续费记账的账户ID
+
+
+class ReimbursementConfirmPayment(BaseModel):
+    accountId: Optional[str] = None  # 打款账户ID

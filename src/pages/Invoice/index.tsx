@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button, Row, Col, Card, Statistic, Modal, message } from 'antd';
 import { PlusOutlined, ExclamationCircleOutlined } from '@ant-design/icons';
@@ -6,17 +6,29 @@ import PageContainer from '@/components/PageContainer';
 import ExportButton from '@/components/ExportButton';
 import InvoiceTable from './components/InvoiceTable';
 import InvoicePreview from './components/InvoicePreview';
-import { mockInvoices } from '@/mock/data';
+import { getInvoices, deleteInvoice } from '@/api/invoice';
 import type { Invoice } from '@/types/invoice';
 
 const { confirm } = Modal;
 
 const InvoicePage: React.FC = () => {
   const navigate = useNavigate();
-  const [invoices, setInvoices] = useState<Invoice[]>(mockInvoices);
-  const [loading] = useState(false);
+  const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [loading, setLoading] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [currentInvoice, setCurrentInvoice] = useState<Invoice | null>(null);
+
+  const fetchData = async () => {
+    setLoading(true);
+    try {
+      const res: any = await getInvoices();
+      setInvoices(res.data ?? []);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { fetchData(); }, []);
 
   const summary = useMemo(() => {
     const total = invoices.length;
@@ -47,9 +59,18 @@ const InvoicePage: React.FC = () => {
       okText: '确定',
       okType: 'danger',
       cancelText: '取消',
-      onOk() {
-        setInvoices((prev) => prev.filter((inv) => inv.id !== invoice.id));
-        message.success('发票已删除');
+      async onOk() {
+        try {
+          const res: any = await deleteInvoice(invoice.id);
+          if (res.code === 0) {
+            message.success('发票已删除');
+            fetchData();
+          } else {
+            message.error(res.message || '删除失败');
+          }
+        } catch {
+          message.error('删除失败');
+        }
       },
     });
   };

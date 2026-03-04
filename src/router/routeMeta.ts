@@ -25,6 +25,7 @@ export const routeMetas: Record<string, RouteMeta> = {
   '/invoice': { title: '发票管理', icon: 'FileTextOutlined' },
   '/invoice/create': { title: '新增发票', hideInMenu: true },
   '/reimbursement': { title: '报销管理', icon: 'WalletOutlined' },
+  '/employee': { title: '员工管理', icon: 'UserOutlined' },
   '/contact': { title: '客户/供应商', icon: 'TeamOutlined' },
   '/settings': { title: '系统设置', icon: 'SettingOutlined' },
 };

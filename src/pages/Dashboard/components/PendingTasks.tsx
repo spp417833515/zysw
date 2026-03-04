@@ -8,6 +8,9 @@ import {
   ScheduleOutlined,
   WalletOutlined,
   PhoneOutlined,
+  UserOutlined,
+  MoneyCollectOutlined,
+  PayCircleOutlined,
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -19,8 +22,10 @@ import {
 } from '@/store/useTransactionStore';
 import { useRecurringExpenseStore } from '@/store/useRecurringExpenseStore';
 import { useReimbursementStore } from '@/store/useReimbursementStore';
+import { getEmployeeReminders, getUnpaidSalaries } from '@/api/employee';
 import { computeReminders, computeRecurringReminders } from '@/utils/reminder';
 import { useThemeToken } from '@/hooks/useThemeToken';
+import { formatAmount } from '@/utils/format';
 
 const { Text, Link } = Typography;
 
@@ -35,13 +40,30 @@ const PendingTasks: React.FC = () => {
   const recurringItems = useRecurringExpenseStore((s) => s.items);
   const pendingReimbursementCount = useReimbursementStore((s) => s.pendingCount);
   const fetchPendingReimbursementCount = useReimbursementStore((s) => s.fetchPendingCount);
+  const unpaidReimbursementCount = useReimbursementStore((s) => s.unpaidCount);
+  const unpaidReimbursementAmount = useReimbursementStore((s) => s.unpaidAmount);
+  const fetchUnpaidReimbursementInfo = useReimbursementStore((s) => s.fetchUnpaidInfo);
   const reminders = computeReminders(pendingPayments);
   const collectionReminders = reminders.filter((r) => r.type === 'collection_overdue');
   const recurringReminders = computeRecurringReminders(recurringItems);
+  const [employeeReminderCount, setEmployeeReminderCount] = React.useState(0);
+  const [unpaidSalaryCount, setUnpaidSalaryCount] = React.useState(0);
+  const [unpaidSalaryAmount, setUnpaidSalaryAmount] = React.useState(0);
 
-  useEffect(() => { fetchPendingReimbursementCount(); }, []);
+  useEffect(() => {
+    fetchPendingReimbursementCount();
+    fetchUnpaidReimbursementInfo();
+    getEmployeeReminders().then((res: any) => {
+      setEmployeeReminderCount(res.data?.length ?? 0);
+    }).catch(() => {});
+    getUnpaidSalaries().then((res: any) => {
+      setUnpaidSalaryCount(res.data?.count ?? 0);
+      setUnpaidSalaryAmount(res.data?.totalAmount ?? 0);
+    }).catch(() => {});
+  }, []);
 
   const items = [
+    // 资金流动
     {
       key: 'income-payment',
       icon: <DollarOutlined style={{ fontSize: 20, color: colors.warning }} />,
@@ -57,32 +79,26 @@ const PendingTasks: React.FC = () => {
       tab: 'expense-payment',
     },
     {
+      key: 'salary-unpaid',
+      icon: <PayCircleOutlined style={{ fontSize: 20, color: colors.expense }} />,
+      label: unpaidSalaryCount > 0 ? `待开工资 ¥${formatAmount(unpaidSalaryAmount)}` : '待开工资',
+      count: unpaidSalaryCount,
+      tab: 'salary-unpaid',
+    },
+    {
+      key: 'collection',
+      icon: <PhoneOutlined style={{ fontSize: 20, color: colors.expense }} />,
+      label: '应收催款',
+      count: collectionReminders.length,
+      tab: 'overdue',
+    },
+    // 票据报销
+    {
       key: 'invoice',
       icon: <FileTextOutlined style={{ fontSize: 20, color: colors.info }} />,
       label: '待开票',
       count: pendingInvoices.length,
       tab: 'invoice',
-    },
-    {
-      key: 'tax',
-      icon: <AuditOutlined style={{ fontSize: 20, color: colors.expense }} />,
-      label: '待申报',
-      count: pendingTaxes.length,
-      tab: 'tax',
-    },
-    {
-      key: 'overdue',
-      icon: <ClockCircleOutlined style={{ fontSize: 20, color: colors.expense }} />,
-      label: '超时提醒',
-      count: reminders.length,
-      tab: 'overdue',
-    },
-    {
-      key: 'recurring',
-      icon: <ScheduleOutlined style={{ fontSize: 20, color: token.colorPrimary }} />,
-      label: '固定开销提醒',
-      count: recurringReminders.length,
-      tab: 'recurring',
     },
     {
       key: 'reimbursement',
@@ -92,11 +108,41 @@ const PendingTasks: React.FC = () => {
       tab: 'reimbursement',
     },
     {
-      key: 'collection',
-      icon: <PhoneOutlined style={{ fontSize: 20, color: colors.expense }} />,
-      label: '应收催款',
-      count: collectionReminders.length,
+      key: 'reimbursement-unpaid',
+      icon: <MoneyCollectOutlined style={{ fontSize: 20, color: colors.expense }} />,
+      label: unpaidReimbursementCount > 0 ? `报销欠款 ¥${formatAmount(unpaidReimbursementAmount)}` : '报销欠款',
+      count: unpaidReimbursementCount,
+      tab: 'reimbursement',
+    },
+    // 周期提醒
+    {
+      key: 'recurring',
+      icon: <ScheduleOutlined style={{ fontSize: 20, color: token.colorPrimary }} />,
+      label: '固定开销提醒',
+      count: recurringReminders.length,
+      tab: 'recurring',
+    },
+    {
+      key: 'overdue',
+      icon: <ClockCircleOutlined style={{ fontSize: 20, color: colors.expense }} />,
+      label: '超时提醒',
+      count: reminders.length,
       tab: 'overdue',
+    },
+    {
+      key: 'employee',
+      icon: <UserOutlined style={{ fontSize: 20, color: token.colorPrimary }} />,
+      label: '工资/入职提醒',
+      count: employeeReminderCount,
+      tab: 'employee',
+    },
+    // 合规（低频末位）
+    {
+      key: 'tax',
+      icon: <AuditOutlined style={{ fontSize: 20, color: colors.expense }} />,
+      label: '待申报',
+      count: pendingTaxes.length,
+      tab: 'tax',
     },
   ];
 
@@ -119,7 +165,11 @@ const PendingTasks: React.FC = () => {
               borderRadius: 6,
               transition: 'background 0.2s',
             }}
-            onClick={() => navigate(item.key === 'reimbursement' ? '/reimbursement' : `/tasks?tab=${item.tab}`)}
+            onClick={() => navigate(
+              item.key === 'reimbursement' || item.key === 'reimbursement-unpaid' ? '/reimbursement' :
+              item.key === 'employee' ? '/employee' :
+              `/tasks?tab=${item.tab}`
+            )}
             onMouseEnter={(e) => {
               e.currentTarget.style.background = token.colorBgTextHover;
             }}
