@@ -1,5 +1,6 @@
 import React, { useCallback } from 'react';
 import { Radio, Input, Button, Row, Col, Space } from 'antd';
+import type { RadioChangeEvent } from 'antd';
 import { SearchOutlined, ReloadOutlined } from '@ant-design/icons';
 import { useTransactionStore } from '@/store/useTransactionStore';
 import { TRANSACTION_TYPE_MAP } from '@/utils/constants';
@@ -12,7 +13,7 @@ const TransactionFilter: React.FC = () => {
   const { filter, setFilter, resetFilter } = useTransactionStore();
 
   const handleTypeChange = useCallback(
-    (e: any) => {
+    (e: RadioChangeEvent) => {
       setFilter({ type: e.target.value || undefined });
     },
     [setFilter],

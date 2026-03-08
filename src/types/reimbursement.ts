@@ -4,7 +4,7 @@ export interface ReimbursementBatch {
   employeeName: string;
   transactionIds: string[];
   totalAmount: number;
-  status: 'pending' | 'completed';
+  status: 'pending' | 'confirmed' | 'paid';
   note: string;
   actualAmount?: number;
   fee: number;
@@ -12,7 +12,7 @@ export interface ReimbursementBatch {
   completedDate?: string;
   createdAt: string;
   completedAt?: string;
-  paymentConfirmed: boolean;
-  paymentConfirmedAt?: string;
+  paidAt?: string;
+  paymentAccountId?: string;
   transactions?: { id: string; date: string; description: string; amount: number }[];
 }

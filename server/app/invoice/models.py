@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Optional
 
-from sqlalchemy import Float, String, Text
+from sqlalchemy import Numeric, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
@@ -16,9 +16,9 @@ class Invoice(Base):
     number: Mapped[str] = mapped_column(String(50), default="")
     type: Mapped[str] = mapped_column(String(20), nullable=False)  # normal | special | electronic
     direction: Mapped[str] = mapped_column(String(10), nullable=False)  # in | out
-    amount: Mapped[float] = mapped_column(Float, default=0.0)
-    tax_amount: Mapped[float] = mapped_column(Float, default=0.0)
-    total_amount: Mapped[float] = mapped_column(Float, default=0.0)
+    amount: Mapped[float] = mapped_column(Numeric(12, 2), default=0.0)
+    tax_amount: Mapped[float] = mapped_column(Numeric(12, 2), default=0.0)
+    total_amount: Mapped[float] = mapped_column(Numeric(12, 2), default=0.0)
     issue_date: Mapped[str] = mapped_column(String(30), default="")
     buyer_name: Mapped[str] = mapped_column(String(200), default="")
     buyer_tax_number: Mapped[str] = mapped_column(String(50), default="")

@@ -25,9 +25,9 @@ def _to_dict(info: CompanyInfo) -> dict:
 def _tax_to_dict(settings: TaxSettings) -> dict:
     return {
         "id": settings.id,
-        "vatRate": settings.vat_rate,
-        "vatThresholdQuarterly": settings.vat_threshold_quarterly,
-        "additionalTaxRate": settings.additional_tax_rate,
+        "vatRate": float(settings.vat_rate),
+        "vatThresholdQuarterly": float(settings.vat_threshold_quarterly),
+        "additionalTaxRate": float(settings.additional_tax_rate),
         "incomeTaxEnabled": settings.income_tax_enabled,
         "province": settings.province,
         "city": settings.city,

@@ -1,18 +1,19 @@
 import request from './request';
 import type { Budget } from '@/types/budget';
+import type { ApiResponse } from '@/types/common';
 
 export function getBudgets() {
-  return request.get('/budgets');
+  return request.get<ApiResponse<Budget[]>>('/budgets');
 }
 
 export function createBudget(data: Partial<Budget>) {
-  return request.post('/budgets', data);
+  return request.post<ApiResponse<Budget>>('/budgets', data);
 }
 
 export function updateBudget(id: string, data: Partial<Budget>) {
-  return request.put(`/budgets/${id}`, data);
+  return request.put<ApiResponse<Budget>>(`/budgets/${id}`, data);
 }
 
 export function deleteBudget(id: string) {
-  return request.delete(`/budgets/${id}`);
+  return request.delete<ApiResponse<null>>(`/budgets/${id}`);
 }

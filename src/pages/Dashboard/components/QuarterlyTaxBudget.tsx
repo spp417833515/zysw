@@ -3,9 +3,8 @@ import { Card, Statistic, Row, Col, Alert, Space, Typography, Spin, theme } from
 import { DollarOutlined, CheckCircleOutlined, WarningOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { getTaxSettings, TaxSettings } from '@/api/settings';
-import { calculateQuarterlyTax, formatCurrency, QuarterlyTaxResult, aggregateQuarterTransactions } from '@/utils/taxCalculator';
-import { getQuarterInfo } from '@/utils/taxConfig';
-import { useTransactionStore } from '@/store/useTransactionStore';
+import { calculateQuarterlyTax, formatCurrency, QuarterlyTaxResult } from '@/utils/taxCalculator';
+import { getDashboardSummary } from '@/api/dashboard';
 import TaxDetailRow from './TaxDetailRow';
 
 const { Text } = Typography;
@@ -16,26 +15,31 @@ const QuarterlyTaxBudget: React.FC = () => {
   const [taxSettings, setTaxSettings] = useState<TaxSettings | null>(null);
   const [loading, setLoading] = useState(true);
   const [taxResult, setTaxResult] = useState<QuarterlyTaxResult | null>(null);
-  const { transactions } = useTransactionStore();
+  const [quarterName, setQuarterName] = useState('');
 
   useEffect(() => {
-    fetchTaxSettings();
+    fetchData();
   }, []);
 
-  useEffect(() => {
-    if (taxSettings) {
-      const today = dayjs();
-      const { start, end } = getQuarterInfo(today);
-      const { income, invoicedIncome, expense } = aggregateQuarterTransactions(transactions, start, end);
-      setTaxResult(calculateQuarterlyTax(income, invoicedIncome, expense, taxSettings));
-    }
-  }, [taxSettings, transactions]);
-
-  const fetchTaxSettings = async () => {
+  const fetchData = async () => {
     try {
       setLoading(true);
-      const res = await getTaxSettings();
-      if (res.data) setTaxSettings(res.data);
+      const [taxRes, summaryRes] = await Promise.all([
+        getTaxSettings(),
+        getDashboardSummary(),
+      ]);
+      const settings = taxRes.data;
+      const summary = summaryRes.data;
+      if (settings && summary) {
+        setTaxSettings(settings);
+        setQuarterName(summary.quarterName);
+        setTaxResult(calculateQuarterlyTax(
+          summary.quarterlyIncome,
+          summary.quarterlyInvoicedIncome,
+          summary.quarterlyExpense,
+          settings,
+        ));
+      }
     } catch {
       // 使用默认税率设置
     } finally {
@@ -56,7 +60,6 @@ const QuarterlyTaxBudget: React.FC = () => {
   }
 
   const today = dayjs();
-  const { name: quarterName } = getQuarterInfo(today);
 
   return (
     <Card

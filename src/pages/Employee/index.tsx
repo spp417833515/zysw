@@ -4,12 +4,15 @@ import { PlusOutlined, SearchOutlined, CalculatorOutlined } from '@ant-design/ic
 import PageContainer from '@/components/PageContainer';
 import EmployeeForm from './components/EmployeeForm';
 import TaxCalcModal from './components/TaxCalcModal';
+import ContractModal from './components/ContractModal';
 import SalaryConfirmModal from '@/pages/Tasks/components/SalaryConfirmModal';
 import {
   getEmployees, createEmployee, updateEmployee, deleteEmployee,
-  getSalaryRecords, getUnpaidSalaries,
+  getSalaryRecords,
 } from '@/api/employee';
 import { formatAmount } from '@/utils/format';
+import { useUnpaidSalaries } from '@/hooks/useUnpaidSalaries';
+import { baseUnpaidSalaryColumns, makeUnpaidActionColumn } from '@/pages/shared/unpaidSalaryColumns';
 import type { Employee, SalaryRecord, UnpaidSalaryItem } from '@/types/employee';
 
 const { Text } = Typography;
@@ -30,20 +33,21 @@ const EmployeePage: React.FC = () => {
   const [editing, setEditing] = useState<Employee | null>(null);
   const [saving, setSaving] = useState(false);
   const [taxCalcOpen, setTaxCalcOpen] = useState(false);
-  const [taxCalcDefaults, setTaxCalcDefaults] = useState<any>({});
+  const [taxCalcDefaults, setTaxCalcDefaults] = useState<{ defaultSalary?: number; defaultSocialRate?: number; defaultFundRate?: number; defaultSpecialDeduction?: number }>({});
+  const [contractOpen, setContractOpen] = useState(false);
+  const [contractEmployee, setContractEmployee] = useState<Employee | null>(null);
 
   // Salary records
   const [salaryRecords, setSalaryRecords] = useState<SalaryRecord[]>([]);
   const [salaryLoading, setSalaryLoading] = useState(false);
-  const [unpaidItems, setUnpaidItems] = useState<UnpaidSalaryItem[]>([]);
-  const [unpaidLoading, setUnpaidLoading] = useState(false);
+  const { unpaidItems, unpaidLoading, fetchUnpaid } = useUnpaidSalaries();
   const [salaryModalOpen, setSalaryModalOpen] = useState(false);
   const [payingItem, setPayingItem] = useState<UnpaidSalaryItem | null>(null);
 
   const fetchData = async (p = page) => {
     setLoading(true);
     try {
-      const res: any = await getEmployees({ page: p, pageSize: 20, keyword: keyword || undefined, status: statusFilter });
+      const res = await getEmployees({ page: p, pageSize: 20, keyword: keyword || undefined, status: statusFilter });
       setData(res.data?.data ?? []);
       setTotal(res.data?.total ?? 0);
     } finally {
@@ -54,26 +58,16 @@ const EmployeePage: React.FC = () => {
   const fetchSalaryRecords = async () => {
     setSalaryLoading(true);
     try {
-      const res: any = await getSalaryRecords();
+      const res = await getSalaryRecords();
       setSalaryRecords(res.data ?? []);
     } finally {
       setSalaryLoading(false);
     }
   };
 
-  const fetchUnpaid = async () => {
-    setUnpaidLoading(true);
-    try {
-      const res: any = await getUnpaidSalaries();
-      setUnpaidItems(res.data?.items ?? []);
-    } finally {
-      setUnpaidLoading(false);
-    }
-  };
-
   useEffect(() => { fetchData(1); setPage(1); }, [keyword, statusFilter]);
 
-  const handleSave = async (values: any) => {
+  const handleSave = async (values: Record<string, unknown>) => {
     setSaving(true);
     try {
       if (editing) {
@@ -93,7 +87,7 @@ const EmployeePage: React.FC = () => {
 
   const handleDelete = async (id: string) => {
     try {
-      const res: any = await deleteEmployee(id);
+      const res = await deleteEmployee(id);
       if (res.code === 0) {
         message.success('删除成功');
         fetchData();
@@ -129,7 +123,7 @@ const EmployeePage: React.FC = () => {
     { title: '发薪日', dataIndex: 'payDay', key: 'payDay', width: 80, render: (v: number) => `每月${v}号` },
     {
       title: '个税', key: 'tax', width: 90,
-      render: (_: any, r: Employee) => (
+      render: (_: unknown, r: Employee) => (
         <Text type={r.taxInfo.tax > 0 ? 'danger' : 'success'}>
           ¥{r.taxInfo.tax.toLocaleString()}
         </Text>
@@ -137,13 +131,13 @@ const EmployeePage: React.FC = () => {
     },
     {
       title: '实发工资', key: 'netSalary', width: 110,
-      render: (_: any, r: Employee) => (
+      render: (_: unknown, r: Employee) => (
         <Text type="success" strong>¥{r.taxInfo.netSalary.toLocaleString()}</Text>
       ),
     },
     {
-      title: '操作', key: 'action', width: 200,
-      render: (_: any, record: Employee) => (
+      title: '操作', key: 'action', width: 240,
+      render: (_: unknown, record: Employee) => (
         <Space>
           <a onClick={() => { setEditing(record); setModalOpen(true); }}>编辑</a>
           <a onClick={() => {
@@ -155,6 +149,7 @@ const EmployeePage: React.FC = () => {
             });
             setTaxCalcOpen(true);
           }}>算税</a>
+          <a onClick={() => { setContractEmployee(record); setContractOpen(true); }}>合同</a>
           <Popconfirm title="确定删除？" onConfirm={() => handleDelete(record.id)}>
             <a style={{ color: '#ff4d4f' }}>删除</a>
           </Popconfirm>
@@ -164,18 +159,8 @@ const EmployeePage: React.FC = () => {
   ];
 
   const unpaidColumns = [
-    { title: '员工', dataIndex: 'employeeName', key: 'employeeName', width: 100 },
-    { title: '年份', dataIndex: 'year', key: 'year', width: 80 },
-    { title: '月份', dataIndex: 'month', key: 'month', width: 80, render: (v: number) => `${v}月` },
-    { title: '应发工资', dataIndex: 'baseSalary', key: 'baseSalary', width: 120, render: (v: number) => <Text type="danger">¥{formatAmount(v)}</Text> },
-    {
-      title: '操作', key: 'action', width: 120,
-      render: (_: any, record: UnpaidSalaryItem) => (
-        <a onClick={() => { setPayingItem(record); setSalaryModalOpen(true); }} style={{ color: '#f5222d', fontWeight: 500 }}>
-          确认发放
-        </a>
-      ),
-    },
+    ...baseUnpaidSalaryColumns,
+    makeUnpaidActionColumn((record) => { setPayingItem(record); setSalaryModalOpen(true); }),
   ];
 
   const salaryColumns = [
@@ -288,6 +273,12 @@ const EmployeePage: React.FC = () => {
         open={taxCalcOpen}
         onCancel={() => setTaxCalcOpen(false)}
         {...taxCalcDefaults}
+      />
+
+      <ContractModal
+        open={contractOpen}
+        employee={contractEmployee}
+        onCancel={() => { setContractOpen(false); setContractEmployee(null); }}
       />
 
       <SalaryConfirmModal

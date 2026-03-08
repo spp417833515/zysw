@@ -14,6 +14,11 @@ from app.category import models as _category_models  # noqa: F401
 from app.transaction import models as _transaction_models  # noqa: F401
 from app.invoice import models as _invoice_models  # noqa: F401
 from app.budget import models as _budget_models  # noqa: F401
+from app.recurring_expense import models as _recurring_expense_models  # noqa: F401
+from app.settings import models as _settings_models  # noqa: F401
+from app.reimbursement import models as _reimbursement_models  # noqa: F401
+from app.contact import models as _contact_models  # noqa: F401
+from app.employee import models as _employee_models  # noqa: F401
 
 config = context.config
 config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)

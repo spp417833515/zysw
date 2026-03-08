@@ -40,10 +40,10 @@ const ReceivablePayable: React.FC = () => {
     setLoading(true);
     try {
       const fn = type === 'receivable' ? getReceivables : getPayables;
-      const res: any = await fn();
+      const res = await fn();
       setItems(res.data?.items ?? []);
       setTotal(res.data?.total ?? 0);
-      const agingRes: any = await getAgingAnalysis(type);
+      const agingRes = await getAgingAnalysis(type);
       setAging(agingRes.data?.buckets ?? []);
     } finally {
       setLoading(false);

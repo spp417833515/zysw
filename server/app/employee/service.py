@@ -83,7 +83,11 @@ FIELD_MAP = {
 
 
 def _to_dict(e: Employee) -> dict:
-    tax_info = calc_tax(e.base_salary, e.social_insurance_rate, e.housing_fund_rate, e.special_deduction)
+    base_salary = float(e.base_salary)
+    social_rate = float(e.social_insurance_rate)
+    fund_rate = float(e.housing_fund_rate)
+    special_ded = float(e.special_deduction)
+    tax_info = calc_tax(base_salary, social_rate, fund_rate, special_ded)
     return {
         "id": e.id,
         "name": e.name,
@@ -93,11 +97,11 @@ def _to_dict(e: Employee) -> dict:
         "position": e.position,
         "entryDate": e.entry_date,
         "status": e.status,
-        "baseSalary": e.base_salary,
+        "baseSalary": base_salary,
         "payDay": e.pay_day,
-        "socialInsuranceRate": e.social_insurance_rate,
-        "housingFundRate": e.housing_fund_rate,
-        "specialDeduction": e.special_deduction,
+        "socialInsuranceRate": social_rate,
+        "housingFundRate": fund_rate,
+        "specialDeduction": special_ded,
         "notes": e.notes,
         "taxInfo": tax_info,
         "createdAt": e.created_at,
@@ -215,8 +219,8 @@ async def get_pay_reminders(db: AsyncSession) -> List[dict]:
                     "type": "pay_day",
                     "label": label,
                     "daysUntil": diff,
-                    "amount": e.base_salary,
-                    "taxInfo": calc_tax(e.base_salary, e.social_insurance_rate, e.housing_fund_rate, e.special_deduction),
+                    "amount": float(e.base_salary),
+                    "taxInfo": calc_tax(float(e.base_salary), float(e.social_insurance_rate), float(e.housing_fund_rate), float(e.special_deduction)),
                 })
         # 入职周年提醒：入职日期前后3天
         if e.entry_date:
@@ -254,9 +258,9 @@ async def get_salary_records(db: AsyncSession, employee_id: Optional[str] = None
         "employeeName": r.employee_name,
         "year": r.year,
         "month": r.month,
-        "baseSalary": r.base_salary,
-        "tax": r.tax,
-        "netSalary": r.net_salary,
+        "baseSalary": float(r.base_salary),
+        "tax": float(r.tax),
+        "netSalary": float(r.net_salary),
         "status": r.status,
         "transactionId": r.transaction_id,
         "confirmedAt": r.confirmed_at,
@@ -278,8 +282,8 @@ async def confirm_salary(db: AsyncSession, employee_id: str, year: int, month: i
     if not e:
         raise ValueError("员工不存在")
 
-    monthly_salary = calc_monthly_salary(e.base_salary, e.entry_date, year, month, e.pay_day)
-    tax_info = calc_tax(monthly_salary, e.social_insurance_rate, e.housing_fund_rate, e.special_deduction)
+    monthly_salary = calc_monthly_salary(float(e.base_salary), e.entry_date, year, month, e.pay_day)
+    tax_info = calc_tax(monthly_salary, float(e.social_insurance_rate), float(e.housing_fund_rate), float(e.special_deduction))
     now = datetime.now(timezone.utc).isoformat()
 
     # 生成支出流水
@@ -290,7 +294,7 @@ async def confirm_salary(db: AsyncSession, employee_id: str, year: int, month: i
         type="expense",
         amount=monthly_salary,
         date=f"{year}-{month:02d}-{e.pay_day:02d}",
-        category_id="",
+        category_id=None,
         account_id=account_id or "",
         description=f"工资发放 - {e.name} - {year}年{month}月",
         tags="[]",
@@ -328,9 +332,9 @@ async def confirm_salary(db: AsyncSession, employee_id: str, year: int, month: i
         "employeeName": record.employee_name,
         "year": record.year,
         "month": record.month,
-        "baseSalary": record.base_salary,
-        "tax": record.tax,
-        "netSalary": record.net_salary,
+        "baseSalary": float(record.base_salary),
+        "tax": float(record.tax),
+        "netSalary": float(record.net_salary),
         "status": record.status,
         "transactionId": record.transaction_id,
         "confirmedAt": record.confirmed_at,
@@ -354,7 +358,7 @@ async def get_unpaid_salaries(db: AsyncSession) -> dict:
     unpaid = []
     total_amount = 0.0
     for e in employees:
-        if not e.entry_date or e.base_salary <= 0:
+        if not e.entry_date or float(e.base_salary) <= 0:
             continue
         try:
             entry = datetime.fromisoformat(e.entry_date)
@@ -367,7 +371,7 @@ async def get_unpaid_salaries(db: AsyncSession) -> dict:
             if y == current_year and m == current_month and current_day < e.pay_day:
                 break
             if (e.id, y, m) not in paid_set:
-                monthly = calc_monthly_salary(e.base_salary, e.entry_date, y, m, e.pay_day)
+                monthly = calc_monthly_salary(float(e.base_salary), e.entry_date, y, m, e.pay_day)
                 if monthly > 0:
                     unpaid.append({
                         "employeeId": e.id,

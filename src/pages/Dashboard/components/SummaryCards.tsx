@@ -9,7 +9,7 @@ import { useAccountStore } from '@/store/useAccountStore';
 import { useReimbursementStore } from '@/store/useReimbursementStore';
 import { getUnpaidSalaries } from '@/api/employee';
 import { formatAmount } from '@/utils/format';
-import { semanticColors } from '@/theme/tokens/colors';
+import { semanticColors, functionalColors } from '@/theme/tokens/colors';
 
 const SummaryCards: React.FC = () => {
   const { accounts } = useAccountStore();
@@ -20,7 +20,7 @@ const SummaryCards: React.FC = () => {
 
   useEffect(() => {
     fetchUnpaidInfo();
-    getUnpaidSalaries().then((res: any) => {
+    getUnpaidSalaries().then((res) => {
       setUnpaidSalaryAmount(res.data?.totalAmount ?? 0);
     }).catch(() => {});
   }, []);
@@ -49,7 +49,7 @@ const SummaryCards: React.FC = () => {
       <Col xs={24} sm={8}>
         <Card hoverable style={cardStyle}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            {iconBox(semanticColors.info, <AccountBookOutlined />)}
+            {iconBox(functionalColors.info, <AccountBookOutlined />)}
             <Statistic title="总资产" value={`¥${formatAmount(totalAssets)}`} />
           </div>
         </Card>
@@ -66,7 +66,7 @@ const SummaryCards: React.FC = () => {
                 <span style={{ color: semanticColors.expense }}>¥{formatAmount(unpaidSalaryAmount)}</span>
               </div>
               <div style={{ fontSize: 13, display: 'flex', justifyContent: 'space-between' }}>
-                <span>待报销</span>
+                <span>待打款</span>
                 <span style={{ color: semanticColors.expense }}>¥{formatAmount(unpaidReimbursementAmount)}</span>
               </div>
               <div style={{ fontSize: 13, display: 'flex', justifyContent: 'space-between', borderTop: '1px solid #f0f0f0', marginTop: 4, paddingTop: 4, fontWeight: 600 }}>

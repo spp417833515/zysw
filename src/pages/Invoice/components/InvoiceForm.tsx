@@ -15,26 +15,27 @@ import {
   Typography,
 } from 'antd';
 import { PlusOutlined, MinusCircleOutlined } from '@ant-design/icons';
-import { invoiceTypeLabels, invoiceDirectionLabels } from '@/types/invoice';
+import { invoiceTypeLabels, invoiceDirectionLabels, type InvoiceType, type InvoiceDirection } from '@/types/invoice';
 import { formatAmount } from '@/utils/format';
 import ImageUpload from '@/components/ImageUpload';
 
 const { Text } = Typography;
 
-interface InvoiceFormValues {
+export interface InvoiceFormValues {
   code: string;
   number: string;
-  type: string;
-  direction: string;
-  issueDate: any;
+  type: InvoiceType;
+  direction: InvoiceDirection;
+  issueDate: { format: (template: string) => string };
   buyerName: string;
   buyerTaxNumber: string;
   sellerName: string;
   sellerTaxNumber: string;
   items: InvoiceFormItem[];
+  imageUrl?: string | null;
 }
 
-interface InvoiceFormItem {
+export interface InvoiceFormItem {
   name: string;
   quantity: number;
   unitPrice: number;

@@ -13,8 +13,12 @@ from app.account.models import Account
 
 
 async def _load_batch_txns(db: AsyncSession, batch: ReimbursementBatch) -> list:
-    """Load all transactions associated with a batch."""
-    return [t for tid in json.loads(batch.transaction_ids) if (t := await db.get(Transaction, tid))]
+    """Load all transactions associated with a batch using a single IN query."""
+    txn_ids = json.loads(batch.transaction_ids)
+    if not txn_ids:
+        return []
+    result = await db.execute(select(Transaction).where(Transaction.id.in_(txn_ids)))
+    return list(result.scalars().all())
 
 
 def _to_dict(batch: ReimbursementBatch) -> dict:
@@ -23,17 +27,17 @@ def _to_dict(batch: ReimbursementBatch) -> dict:
         "batchNo": batch.batch_no,
         "employeeName": batch.employee_name,
         "transactionIds": json.loads(batch.transaction_ids),
-        "totalAmount": batch.total_amount,
+        "totalAmount": float(batch.total_amount),
         "status": batch.status,
         "note": batch.note,
-        "actualAmount": batch.actual_amount,
-        "fee": batch.fee,
+        "actualAmount": float(batch.actual_amount) if batch.actual_amount is not None else None,
+        "fee": float(batch.fee),
         "feeTransactionId": batch.fee_transaction_id,
         "completedDate": batch.completed_date,
         "createdAt": batch.created_at,
         "completedAt": batch.completed_at,
-        "paymentConfirmed": batch.payment_confirmed,
-        "paymentConfirmedAt": batch.payment_confirmed_at,
+        "paidAt": batch.paid_at,
+        "paymentAccountId": batch.payment_account_id,
     }
 
 
@@ -92,7 +96,7 @@ async def get_batches(db: AsyncSession) -> list:
         d = _to_dict(b)
         txns = await _load_batch_txns(db, b)
         d["transactions"] = [
-            {"id": t.id, "date": t.date, "description": t.description, "amount": t.amount}
+            {"id": t.id, "date": t.date, "description": t.description, "amount": float(t.amount)}
             for t in txns
         ]
         batches.append(d)
@@ -108,14 +112,14 @@ async def complete_batch(db: AsyncSession, batch_id: str, data: ReimbursementCom
         raise ValueError("手续费大于0时必须选择记账账户")
 
     now = datetime.now(timezone.utc).isoformat()
-    batch.status = "completed"
+    batch.status = "confirmed"
     batch.completed_at = now
     batch.completed_date = data.completedDate
     batch.actual_amount = data.actualAmount if data.actualAmount is not None else batch.total_amount
     batch.fee = data.fee
 
     for txn in await _load_batch_txns(db, batch):
-        txn.reimbursement_status = "completed"
+        txn.reimbursement_status = "confirmed"
 
     if data.fee and data.fee > 0:
         fee_txn = Transaction(
@@ -123,7 +127,7 @@ async def complete_batch(db: AsyncSession, batch_id: str, data: ReimbursementCom
             type="expense",
             amount=data.fee,
             date=data.completedDate,
-            category_id="",
+            category_id=None,
             account_id=data.feeAccountId,
             description=f"报销手续费 - {batch.batch_no} ({batch.employee_name})",
             tags="[]",
@@ -165,51 +169,35 @@ async def get_pending_count(db: AsyncSession) -> int:
 
 
 async def get_unpaid_completed(db: AsyncSession) -> dict:
-    """获取已报销但未打款的批次数和总金额"""
+    """获取已确认但未打款的批次数和总金额"""
     result = await db.execute(
         select(ReimbursementBatch)
-        .where(ReimbursementBatch.status == "completed")
-        .where(ReimbursementBatch.payment_confirmed == False)
+        .where(ReimbursementBatch.status == "confirmed")
     )
     batches = result.scalars().all()
-    total_amount = sum(b.actual_amount if b.actual_amount is not None else b.total_amount for b in batches)
+    total_amount = sum(float(b.actual_amount) if b.actual_amount is not None else float(b.total_amount) for b in batches)
     return {"count": len(batches), "totalAmount": round(total_amount, 2)}
 
 
 async def confirm_payment(db: AsyncSession, batch_id: str, account_id: Optional[str] = None) -> Optional[dict]:
-    """确认报销打款：标记已打款 + 生成支出流水"""
+    """确认报销打款：标记已打款 + 扣减账户余额"""
     batch = await db.get(ReimbursementBatch, batch_id)
-    if not batch or batch.status != "completed" or batch.payment_confirmed:
+    if not batch or batch.status != "confirmed":
         return None
 
     now = datetime.now(timezone.utc).isoformat()
-    batch.payment_confirmed = True
-    batch.payment_confirmed_at = now
+    batch.status = "paid"
+    batch.paid_at = now
+    batch.payment_account_id = account_id
 
-    # 标记关联交易的 payment_confirmed
+    # 标记关联交易的 payment_confirmed 和 reimbursement_status
     for txn in await _load_batch_txns(db, batch):
         txn.payment_confirmed = True
         txn.payment_confirmed_at = now
+        txn.reimbursement_status = "paid"
 
-    # 生成一笔支出流水：报销发放
+    # 更新账户余额（钱确实从公司账户出）
     pay_amount = batch.actual_amount if batch.actual_amount is not None else batch.total_amount
-    pay_txn = Transaction(
-        id=str(uuid.uuid4()),
-        type="expense",
-        amount=pay_amount,
-        date=batch.completed_date or now[:10],
-        category_id="",
-        account_id=account_id or "",
-        description=f"报销发放 - {batch.batch_no} ({batch.employee_name})",
-        tags="[]",
-        payment_confirmed=True,
-        payment_account_type="company",
-        payment_confirmed_at=now,
-        invoice_needed=False,
-    )
-    db.add(pay_txn)
-
-    # 更新账户余额
     if account_id:
         account = await db.get(Account, account_id)
         if account:

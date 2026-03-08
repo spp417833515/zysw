@@ -10,6 +10,7 @@ import {
 interface RecurringExpenseState {
   items: RecurringExpense[];
   loading: boolean;
+  error: string | null;
   fetchItems: () => Promise<void>;
   addItem: (data: Partial<RecurringExpense>) => Promise<void>;
   updateItem: (id: string, data: Partial<RecurringExpense>) => Promise<void>;
@@ -19,23 +20,24 @@ interface RecurringExpenseState {
 export const useRecurringExpenseStore = create<RecurringExpenseState>((set) => ({
   items: [],
   loading: false,
+  error: null,
   fetchItems: async () => {
-    set({ loading: true });
+    set({ loading: true, error: null });
     try {
-      const res: any = await getRecurringExpenses();
+      const res = await getRecurringExpenses();
       set({ items: res.data ?? [], loading: false });
-    } catch {
-      set({ loading: false });
+    } catch (e) {
+      set({ loading: false, error: e instanceof Error ? e.message : '加载固定开销失败' });
     }
   },
   addItem: async (data) => {
-    const res: any = await createRecurringExpense(data);
+    const res = await createRecurringExpense(data);
     if (res.code === 0) {
       set((s) => ({ items: [...s.items, res.data] }));
     }
   },
   updateItem: async (id, data) => {
-    const res: any = await apiUpdate(id, data);
+    const res = await apiUpdate(id, data);
     if (res.code === 0) {
       set((s) => ({
         items: s.items.map((item) => (item.id === id ? res.data : item)),
@@ -43,7 +45,7 @@ export const useRecurringExpenseStore = create<RecurringExpenseState>((set) => (
     }
   },
   deleteItem: async (id) => {
-    const res: any = await apiDelete(id);
+    const res = await apiDelete(id);
     if (res.code === 0) {
       set((s) => ({ items: s.items.filter((item) => item.id !== id) }));
     }

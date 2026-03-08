@@ -26,7 +26,7 @@ const ContactPage: React.FC = () => {
   const fetchData = async (p = page) => {
     setLoading(true);
     try {
-      const res: any = await getContacts({ page: p, pageSize: 20, keyword: keyword || undefined, type: typeFilter });
+      const res = await getContacts({ page: p, pageSize: 20, keyword: keyword || undefined, type: typeFilter });
       setData(res.data?.data ?? []);
       setTotal(res.data?.total ?? 0);
     } finally {
@@ -36,7 +36,7 @@ const ContactPage: React.FC = () => {
 
   useEffect(() => { fetchData(1); setPage(1); }, [keyword, typeFilter]);
 
-  const handleSave = async (values: any) => {
+  const handleSave = async (values: Record<string, unknown>) => {
     setSaving(true);
     try {
       if (editing) {
@@ -56,7 +56,7 @@ const ContactPage: React.FC = () => {
 
   const handleDelete = async (id: string) => {
     try {
-      const res: any = await deleteContact(id);
+      const res = await deleteContact(id);
       if (res.code === 0) {
         message.success('删除成功');
         fetchData();
@@ -83,7 +83,7 @@ const ContactPage: React.FC = () => {
     { title: '税号', dataIndex: 'taxNumber', key: 'taxNumber' },
     {
       title: '操作', key: 'action',
-      render: (_: any, record: Contact) => (
+      render: (_: unknown, record: Contact) => (
         <Space>
           <a onClick={() => { setEditing(record); setModalOpen(true); }}>编辑</a>
           <Popconfirm title="确定删除？" onConfirm={() => handleDelete(record.id)}>

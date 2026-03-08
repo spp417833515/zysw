@@ -6,7 +6,7 @@ import type { Employee } from '@/types/employee';
 interface Props {
   open: boolean;
   editingEmployee: Employee | null;
-  onOk: (values: any) => void;
+  onOk: (values: Record<string, unknown>) => void;
   onCancel: () => void;
   loading: boolean;
 }

@@ -31,7 +31,7 @@ const TrendReport: React.FC = () => {
     const fetch = async () => {
       setLoading(true);
       try {
-        const res: any = await getTrendReport({ startDate: dateRange[0], endDate: dateRange[1] });
+        const res = await getTrendReport({ startDate: dateRange[0], endDate: dateRange[1] });
         setTrendData(res.data?.months ?? []);
       } catch { /* ignore */ } finally {
         setLoading(false);

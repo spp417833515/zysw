@@ -1,4 +1,5 @@
 import request from './request';
+import type { ApiResponse } from '@/types/common';
 
 export interface CompanyInfo {
   id?: string;
@@ -27,20 +28,20 @@ export interface TaxSettings {
 
 // 获取企业信息
 export const getCompanyInfo = () => {
-  return request.get<CompanyInfo>('/settings/company');
+  return request.get<ApiResponse<CompanyInfo>>('/settings/company');
 };
 
 // 保存企业信息
 export const saveCompanyInfo = (data: CompanyInfo) => {
-  return request.post<CompanyInfo>('/settings/company', data);
+  return request.post<ApiResponse<CompanyInfo>>('/settings/company', data);
 };
 
 // 获取税率设置
 export const getTaxSettings = () => {
-  return request.get<TaxSettings>('/settings/tax');
+  return request.get<ApiResponse<TaxSettings>>('/settings/tax');
 };
 
 // 保存税率设置
 export const saveTaxSettings = (data: TaxSettings) => {
-  return request.post<TaxSettings>('/settings/tax', data);
+  return request.post<ApiResponse<TaxSettings>>('/settings/tax', data);
 };

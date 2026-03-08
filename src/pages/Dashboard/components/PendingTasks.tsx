@@ -53,10 +53,10 @@ const PendingTasks: React.FC = () => {
   useEffect(() => {
     fetchPendingReimbursementCount();
     fetchUnpaidReimbursementInfo();
-    getEmployeeReminders().then((res: any) => {
+    getEmployeeReminders().then((res) => {
       setEmployeeReminderCount(res.data?.length ?? 0);
     }).catch(() => {});
-    getUnpaidSalaries().then((res: any) => {
+    getUnpaidSalaries().then((res) => {
       setUnpaidSalaryCount(res.data?.count ?? 0);
       setUnpaidSalaryAmount(res.data?.totalAmount ?? 0);
     }).catch(() => {});
@@ -103,14 +103,14 @@ const PendingTasks: React.FC = () => {
     {
       key: 'reimbursement',
       icon: <WalletOutlined style={{ fontSize: 20, color: colors.warning }} />,
-      label: '待报销',
+      label: '待确认报销',
       count: pendingReimbursementCount,
       tab: 'reimbursement',
     },
     {
       key: 'reimbursement-unpaid',
       icon: <MoneyCollectOutlined style={{ fontSize: 20, color: colors.expense }} />,
-      label: unpaidReimbursementCount > 0 ? `报销欠款 ¥${formatAmount(unpaidReimbursementAmount)}` : '报销欠款',
+      label: unpaidReimbursementCount > 0 ? `待打款 ¥${formatAmount(unpaidReimbursementAmount)}` : '待打款',
       count: unpaidReimbursementCount,
       tab: 'reimbursement',
     },

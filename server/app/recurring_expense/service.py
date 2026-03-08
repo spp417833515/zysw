@@ -14,7 +14,7 @@ def _to_dict(item: RecurringExpense, category_name: str = "", account_name: str 
     return {
         "id": item.id,
         "name": item.name,
-        "amount": item.amount,
+        "amount": float(item.amount),
         "dayOfMonth": item.day_of_month,
         "categoryId": item.category_id,
         "categoryName": category_name,
@@ -44,8 +44,28 @@ async def _enrich(db: AsyncSession, item: RecurringExpense) -> dict:
 
 async def get_all(db: AsyncSession) -> List[dict]:
     result = await db.execute(select(RecurringExpense).order_by(RecurringExpense.created_at))
-    items = result.scalars().all()
-    return [await _enrich(db, item) for item in items]
+    items = list(result.scalars().all())
+    if not items:
+        return []
+
+    # Batch query names
+    cat_ids = {i.category_id for i in items if i.category_id}
+    acc_ids = {i.account_id for i in items if i.account_id}
+
+    cat_map: dict[str, str] = {}
+    if cat_ids:
+        cat_result = await db.execute(select(Category.id, Category.name).where(Category.id.in_(cat_ids)))
+        cat_map = {r[0]: r[1] for r in cat_result.all()}
+
+    acc_map: dict[str, str] = {}
+    if acc_ids:
+        acc_result = await db.execute(select(Account.id, Account.name).where(Account.id.in_(acc_ids)))
+        acc_map = {r[0]: r[1] for r in acc_result.all()}
+
+    return [
+        _to_dict(item, cat_map.get(item.category_id, ""), acc_map.get(item.account_id, ""))
+        for item in items
+    ]
 
 
 async def create(db: AsyncSession, data: RecurringExpenseCreate) -> dict:

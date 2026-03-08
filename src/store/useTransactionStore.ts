@@ -20,6 +20,7 @@ interface TransactionState {
   transactions: Transaction[];
   total: number;
   loading: boolean;
+  error: string | null;
   page: number;
   pageSize: number;
   filter: TransactionFilter;
@@ -49,6 +50,7 @@ export const useTransactionStore = create<TransactionState>((set, get) => ({
   transactions: [],
   total: 0,
   loading: false,
+  error: null,
   page: 1,
   pageSize: 20,
   filter: defaultFilter,
@@ -66,9 +68,9 @@ export const useTransactionStore = create<TransactionState>((set, get) => ({
     const page = params?.page ?? s.page;
     const pageSize = params?.pageSize ?? s.pageSize;
     const f = s.filter;
-    set({ loading: true, page });
+    set({ loading: true, error: null, page });
     try {
-      const res: any = await getTransactions({
+      const res = await getTransactions({
         page,
         pageSize,
         type: f.type,
@@ -85,8 +87,8 @@ export const useTransactionStore = create<TransactionState>((set, get) => ({
       const list = Array.isArray(data) ? data : (data?.data ?? []);
       const total = Array.isArray(data) ? data.length : (data?.total ?? 0);
       set({ transactions: list, total, loading: false });
-    } catch {
-      set({ loading: false });
+    } catch (e) {
+      set({ loading: false, error: e instanceof Error ? e.message : '加载交易失败' });
     }
   },
 
@@ -96,7 +98,7 @@ export const useTransactionStore = create<TransactionState>((set, get) => ({
   pendingTaxesList: [],
   fetchPendingData: async () => {
     try {
-      const [paymentsRes, invoicesRes, taxesRes]: any[] = await Promise.all([
+      const [paymentsRes, invoicesRes, taxesRes] = await Promise.all([
         getPendingPayments(),
         getPendingInvoices(),
         getPendingTaxes(),
@@ -110,7 +112,7 @@ export const useTransactionStore = create<TransactionState>((set, get) => ({
   },
 
   addTransaction: async (t) => {
-    const res: any = await createTransaction(t as any);
+    const res = await createTransaction(t as Partial<Transaction>);
     if (res.code === 0) {
       useAccountStore.getState().fetchAccounts();
       get().fetchTransactions();
@@ -120,7 +122,7 @@ export const useTransactionStore = create<TransactionState>((set, get) => ({
   },
 
   updateTransaction: async (id, updates) => {
-    const res: any = await apiUpdateTransaction(id, updates as any);
+    const res = await apiUpdateTransaction(id, updates);
     if (res.code === 0) {
       set((s) => ({
         transactions: s.transactions.map((t) => (t.id === id ? res.data : t)),
@@ -130,7 +132,7 @@ export const useTransactionStore = create<TransactionState>((set, get) => ({
   },
 
   deleteTransaction: async (id) => {
-    const res: any = await apiDeleteTransaction(id);
+    const res = await apiDeleteTransaction(id);
     if (res.code === 0) {
       useAccountStore.getState().fetchAccounts();
       get().fetchTransactions();
@@ -139,7 +141,7 @@ export const useTransactionStore = create<TransactionState>((set, get) => ({
   },
 
   confirmPayment: async (id, accountType) => {
-    const res: any = await apiConfirmPayment(id, accountType);
+    const res = await apiConfirmPayment(id, accountType);
     if (res.code === 0) {
       set((s) => ({
         transactions: s.transactions.map((t) => (t.id === id ? res.data : t)),
@@ -149,7 +151,7 @@ export const useTransactionStore = create<TransactionState>((set, get) => ({
   },
 
   confirmInvoice: async (id, invoiceId) => {
-    const res: any = await apiConfirmInvoice(id, invoiceId);
+    const res = await apiConfirmInvoice(id, invoiceId);
     if (res.code === 0) {
       set((s) => ({
         transactions: s.transactions.map((t) => (t.id === id ? res.data : t)),
@@ -159,7 +161,7 @@ export const useTransactionStore = create<TransactionState>((set, get) => ({
   },
 
   skipInvoice: async (id) => {
-    const res: any = await apiSkipInvoice(id);
+    const res = await apiSkipInvoice(id);
     if (res.code === 0) {
       set((s) => ({
         transactions: s.transactions.map((t) => (t.id === id ? res.data : t)),
@@ -169,7 +171,7 @@ export const useTransactionStore = create<TransactionState>((set, get) => ({
   },
 
   confirmTaxDeclare: async (id, taxPeriod) => {
-    const res: any = await apiConfirmTax(id, taxPeriod);
+    const res = await apiConfirmTax(id, taxPeriod);
     if (res.code === 0) {
       set((s) => ({
         transactions: s.transactions.map((t) => (t.id === id ? res.data : t)),

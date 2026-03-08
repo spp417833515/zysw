@@ -20,7 +20,7 @@ def _to_dict(txn: Transaction, attachments: Optional[list] = None,
     return {
         "id": txn.id,
         "type": txn.type,
-        "amount": txn.amount,
+        "amount": float(txn.amount),
         "date": txn.date,
         "categoryId": txn.category_id,
         "categoryName": category_name,
@@ -85,8 +85,64 @@ async def _enrich(db: AsyncSession, txn: Transaction, attachments: Optional[list
     return _to_dict(txn, att_result, cat_name, acc_name, to_acc_name, contact_name)
 
 
+async def _batch_enrich(db: AsyncSession, txns: List[Transaction]) -> List[dict]:
+    """Batch enrich transactions: 3 IN queries for names + 1 for attachments instead of N+1."""
+    if not txns:
+        return []
+
+    # Collect all IDs
+    txn_ids = [t.id for t in txns]
+    cat_ids = {t.category_id for t in txns if t.category_id}
+    acc_ids = {t.account_id for t in txns}
+    acc_ids.update(t.to_account_id for t in txns if t.to_account_id)
+    contact_ids = {t.contact_id for t in txns if t.contact_id}
+
+    # Batch query names
+    cat_map: dict[str, str] = {}
+    if cat_ids:
+        result = await db.execute(select(Category.id, Category.name).where(Category.id.in_(cat_ids)))
+        cat_map = {r[0]: r[1] for r in result.all()}
+
+    acc_map: dict[str, str] = {}
+    if acc_ids:
+        result = await db.execute(select(Account.id, Account.name).where(Account.id.in_(acc_ids)))
+        acc_map = {r[0]: r[1] for r in result.all()}
+
+    contact_map: dict[str, str] = {}
+    if contact_ids:
+        result = await db.execute(select(Contact.id, Contact.name).where(Contact.id.in_(contact_ids)))
+        contact_map = {r[0]: r[1] for r in result.all()}
+
+    # Batch query attachments
+    att_result = await db.execute(
+        select(Attachment).where(Attachment.transaction_id.in_(txn_ids))
+    )
+    att_map: dict[str, list] = {}
+    for a in att_result.scalars().all():
+        att_map.setdefault(a.transaction_id, []).append(
+            {"id": a.id, "name": a.name, "url": a.url, "type": a.type, "size": a.size}
+        )
+
+    # Assemble results
+    items = []
+    for txn in txns:
+        items.append(_to_dict(
+            txn,
+            attachments=att_map.get(txn.id, []),
+            category_name=cat_map.get(txn.category_id, "") if txn.category_id else "",
+            account_name=acc_map.get(txn.account_id, ""),
+            to_account_name=acc_map.get(txn.to_account_id, "") if txn.to_account_id else "",
+            contact_name=contact_map.get(txn.contact_id, "") if txn.contact_id else "",
+        ))
+    return items
+
+
 async def _update_balance(db: AsyncSession, txn_type: str, amount: float,
-                          account_id: str, to_account_id: Optional[str], reverse: bool = False):
+                          account_id: str, to_account_id: Optional[str],
+                          reverse: bool = False, payment_account_type: Optional[str] = None):
+    # 个人代付不影响公司账户余额
+    if payment_account_type == "personal":
+        return
     multiplier = -1 if reverse else 1
     account = await db.get(Account, account_id)
     if account:
@@ -152,9 +208,7 @@ async def get_transactions(
     )
     txns = result.scalars().all()
 
-    items = []
-    for txn in txns:
-        items.append(await _enrich(db, txn))
+    items = await _batch_enrich(db, list(txns))
 
     return {
         "data": items,
@@ -176,7 +230,7 @@ async def create_transaction(db: AsyncSession, data: TransactionCreate) -> dict:
         type=data.type,
         amount=data.amount,
         date=data.date,
-        category_id=data.categoryId,
+        category_id=data.categoryId or None,
         account_id=data.accountId,
         to_account_id=data.toAccountId,
         description=data.description,
@@ -212,8 +266,9 @@ async def create_transaction(db: AsyncSession, data: TransactionCreate) -> dict:
         db.add(a)
         att_dicts.append({"id": a.id, "name": a.name, "url": a.url, "type": a.type, "size": a.size})
 
-    # Update account balance
-    await _update_balance(db, data.type, data.amount, data.accountId, data.toAccountId)
+    # Update account balance (personal 代付不扣公司账户)
+    await _update_balance(db, data.type, data.amount, data.accountId, data.toAccountId,
+                          payment_account_type=data.paymentAccountType)
 
     await db.commit()
     await db.refresh(txn)
@@ -229,7 +284,8 @@ async def update_transaction(db: AsyncSession, txn_id: str, data: TransactionUpd
         return None
 
     # Reverse old balance effect
-    await _update_balance(db, txn.type, txn.amount, txn.account_id, txn.to_account_id, reverse=True)
+    await _update_balance(db, txn.type, txn.amount, txn.account_id, txn.to_account_id,
+                          reverse=True, payment_account_type=txn.payment_account_type)
 
     update_data = data.model_dump(exclude_unset=True)
     field_map = {
@@ -273,7 +329,8 @@ async def update_transaction(db: AsyncSession, txn_id: str, data: TransactionUpd
     txn.updated_at = datetime.now(timezone.utc).isoformat()
 
     # Apply new balance effect
-    await _update_balance(db, txn.type, txn.amount, txn.account_id, txn.to_account_id)
+    await _update_balance(db, txn.type, txn.amount, txn.account_id, txn.to_account_id,
+                          payment_account_type=txn.payment_account_type)
 
     # Update attachments if provided
     if new_attachments is not None:
@@ -309,7 +366,8 @@ async def delete_transaction(db: AsyncSession, txn_id: str) -> bool:
         return False
 
     # Reverse balance
-    await _update_balance(db, txn.type, txn.amount, txn.account_id, txn.to_account_id, reverse=True)
+    await _update_balance(db, txn.type, txn.amount, txn.account_id, txn.to_account_id,
+                          reverse=True, payment_account_type=txn.payment_account_type)
 
     # Delete attachments
     atts = await db.execute(select(Attachment).where(Attachment.transaction_id == txn_id))
@@ -386,10 +444,7 @@ async def get_pending_payments(db: AsyncSession) -> List[dict]:
         .where(Transaction.payment_confirmed == False)
         .order_by(Transaction.date.desc())
     )
-    items = []
-    for txn in result.scalars().all():
-        items.append(await _enrich(db, txn))
-    return items
+    return await _batch_enrich(db, list(result.scalars().all()))
 
 
 async def get_pending_invoices(db: AsyncSession) -> List[dict]:
@@ -398,10 +453,7 @@ async def get_pending_invoices(db: AsyncSession) -> List[dict]:
         .where(and_(Transaction.invoice_needed == True, Transaction.invoice_completed == False))
         .order_by(Transaction.date.desc())
     )
-    items = []
-    for txn in result.scalars().all():
-        items.append(await _enrich(db, txn))
-    return items
+    return await _batch_enrich(db, list(result.scalars().all()))
 
 
 async def get_pending_taxes(db: AsyncSession) -> List[dict]:
@@ -410,10 +462,7 @@ async def get_pending_taxes(db: AsyncSession) -> List[dict]:
         .where(Transaction.tax_declared == False)
         .order_by(Transaction.date.desc())
     )
-    items = []
-    for txn in result.scalars().all():
-        items.append(await _enrich(db, txn))
-    return items
+    return await _batch_enrich(db, list(result.scalars().all()))
 
 
 async def batch_create_transactions(db: AsyncSession, items_data: list) -> dict:

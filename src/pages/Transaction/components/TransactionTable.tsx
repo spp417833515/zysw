@@ -117,7 +117,7 @@ const TransactionTable: React.FC<TransactionTableProps> = ({ onViewDetail }) => 
   const handleTableChange = useCallback(
     (
       pagination: TablePaginationConfig,
-      _filters: any,
+      _filters: Record<string, unknown>,
       _sorter: SorterResult<Transaction> | SorterResult<Transaction>[],
     ) => {
       fetchTransactions({ page: pagination.current || 1 });
@@ -170,8 +170,9 @@ const TransactionTable: React.FC<TransactionTableProps> = ({ onViewDetail }) => 
       dataIndex: 'reimbursementStatus',
       key: 'reimbursementStatus',
       width: 80,
-      render: (status: string | null | undefined, record: Transaction) => {
-        if (status === 'completed') return <Tag color="purple">已报销</Tag>;
+      render: (status: string | null | undefined, _record: Transaction) => {
+        if (status === 'paid') return <Tag color="green">已报销</Tag>;
+        if (status === 'confirmed') return <Tag color="blue">待打款</Tag>;
         if (status === 'pending') return <Tag color="orange">报销中</Tag>;
         return null;
       },
@@ -216,7 +217,7 @@ const TransactionTable: React.FC<TransactionTableProps> = ({ onViewDetail }) => 
       title: '凭证',
       key: 'documents',
       width: 110,
-      render: (_: any, record: Transaction) => {
+      render: (_: unknown, record: Transaction) => {
         const isIncome = record.type === 'income';
         const isTransfer = record.type === 'transfer';
         const handleUpload = (target: { transactionId: string; field: VoucherField; label: string }) => {
@@ -249,7 +250,7 @@ const TransactionTable: React.FC<TransactionTableProps> = ({ onViewDetail }) => 
       title: '操作',
       key: 'action',
       width: 70,
-      render: (_: any, record: Transaction) => (
+      render: (_: unknown, record: Transaction) => (
         <Button
           type="link"
           size="small"

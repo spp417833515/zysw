@@ -7,6 +7,7 @@ import { useAccountStore } from '@/store/useAccountStore';
 import { useTransactionStore } from '@/store/useTransactionStore';
 import { formatAmount } from '@/utils/format';
 import type { Account } from '@/types/account';
+import type { Dayjs } from 'dayjs';
 import AccountCard from './components/AccountCard';
 import AccountFormModal from './components/AccountFormModal';
 import AccountTransferModal from './components/AccountTransferModal';
@@ -59,8 +60,8 @@ const AccountPage: React.FC = () => {
       try {
         await deleteAccount(account.id);
         message.success('账户删除成功');
-      } catch (e: any) {
-        message.error(e?.message || '账户删除失败');
+      } catch (e: unknown) {
+        message.error((e as Error)?.message || '账户删除失败');
       }
     },
     [deleteAccount],
@@ -90,7 +91,7 @@ const AccountPage: React.FC = () => {
       toAccountId: string;
       amount: number;
       description?: string;
-      date: any;
+      date: string | Dayjs;
     }) => {
       try {
         await useTransactionStore.getState().addTransaction({

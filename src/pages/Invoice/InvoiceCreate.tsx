@@ -3,15 +3,21 @@ import { useNavigate } from 'react-router-dom';
 import { message } from 'antd';
 import PageContainer from '@/components/PageContainer';
 import InvoiceForm from './components/InvoiceForm';
+import type { InvoiceFormValues } from './components/InvoiceForm';
 import { createInvoice } from '@/api/invoice';
+import type { InvoiceItem } from '@/types/invoice';
 
 const InvoiceCreate: React.FC = () => {
   const navigate = useNavigate();
 
-  const handleSubmit = async (values: any) => {
-    const items = values.items.map((item: any, index: number) => ({
-      ...item,
-      key: index,
+  const handleSubmit = async (values: InvoiceFormValues) => {
+    const items: InvoiceItem[] = values.items.map((item) => ({
+      name: item.name,
+      quantity: item.quantity,
+      unitPrice: item.unitPrice,
+      taxRate: item.taxRate,
+      amount: item.amount || 0,
+      taxAmount: item.taxAmount || 0,
     }));
     const payload = {
       code: values.code,
@@ -24,18 +30,18 @@ const InvoiceCreate: React.FC = () => {
       sellerName: values.sellerName,
       sellerTaxNumber: values.sellerTaxNumber,
       items,
-      amount: items.reduce((sum: number, item: any) => sum + (item.amount || 0), 0),
-      taxAmount: items.reduce((sum: number, item: any) => sum + (item.taxAmount || 0), 0),
+      amount: items.reduce((sum, item) => sum + item.amount, 0),
+      taxAmount: items.reduce((sum, item) => sum + item.taxAmount, 0),
       totalAmount: items.reduce(
-        (sum: number, item: any) => sum + (item.amount || 0) + (item.taxAmount || 0),
+        (sum, item) => sum + item.amount + item.taxAmount,
         0
       ),
-      imageUrl: values.imageUrl || null,
+      imageUrl: values.imageUrl || undefined,
       status: 'pending' as const,
     };
 
     try {
-      const res: any = await createInvoice(payload);
+      const res = await createInvoice(payload);
       if (res.code === 0) {
         message.success('发票创建成功');
         navigate('/invoice');

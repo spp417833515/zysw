@@ -10,6 +10,7 @@ import {
 interface BudgetState {
   budgets: Budget[];
   loading: boolean;
+  error: string | null;
   fetchBudgets: () => Promise<void>;
   addBudget: (b: Omit<Budget, 'id' | 'createdAt' | 'updatedAt'>) => Promise<void>;
   updateBudget: (id: string, b: Partial<Budget>) => Promise<void>;
@@ -19,23 +20,24 @@ interface BudgetState {
 export const useBudgetStore = create<BudgetState>((set) => ({
   budgets: [],
   loading: false,
+  error: null,
   fetchBudgets: async () => {
-    set({ loading: true });
+    set({ loading: true, error: null });
     try {
-      const res: any = await getBudgets();
+      const res = await getBudgets();
       set({ budgets: res.data ?? [], loading: false });
-    } catch {
-      set({ loading: false });
+    } catch (e) {
+      set({ loading: false, error: e instanceof Error ? e.message : '加载预算失败' });
     }
   },
   addBudget: async (b) => {
-    const res: any = await createBudget(b as any);
+    const res = await createBudget(b);
     if (res.code === 0) {
       set((s) => ({ budgets: [...s.budgets, res.data] }));
     }
   },
   updateBudget: async (id, updates) => {
-    const res: any = await apiUpdateBudget(id, updates as any);
+    const res = await apiUpdateBudget(id, updates);
     if (res.code === 0) {
       set((s) => ({
         budgets: s.budgets.map((b) => (b.id === id ? res.data : b)),
@@ -43,7 +45,7 @@ export const useBudgetStore = create<BudgetState>((set) => ({
     }
   },
   deleteBudget: async (id) => {
-    const res: any = await apiDeleteBudget(id);
+    const res = await apiDeleteBudget(id);
     if (res.code === 0) {
       set((s) => ({ budgets: s.budgets.filter((b) => b.id !== id) }));
     }

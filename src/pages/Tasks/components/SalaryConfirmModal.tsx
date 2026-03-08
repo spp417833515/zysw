@@ -27,7 +27,7 @@ const SalaryConfirmModal: React.FC<SalaryConfirmModalProps> = ({
     if (!values) return;
     setLoading(true);
     try {
-      const res: any = await confirmSalary({
+      const res = await confirmSalary({
         employeeId: item.employeeId,
         year: item.year,
         month: item.month,

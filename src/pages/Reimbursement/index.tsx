@@ -58,9 +58,9 @@ const ReimbursementPage: React.FC = () => {
     {
       title: '状态', key: 'status',
       render: (_: unknown, r: ReimbursementBatch) => {
-        if (r.status === 'pending') return <Tag color="orange">待报销</Tag>;
-        if (r.status === 'completed' && !r.paymentConfirmed) return <Tag color="red">已报销·未打款</Tag>;
-        return <Tag color="green">已完成</Tag>;
+        if (r.status === 'pending') return <Tag color="orange">待确认</Tag>;
+        if (r.status === 'confirmed') return <Tag color="blue">待打款</Tag>;
+        return <Tag color="green">已打款</Tag>;
       },
     },
     { title: '报销日期', dataIndex: 'completedDate', key: 'completedDate', render: (v: string) => v || '-' },
@@ -70,17 +70,17 @@ const ReimbursementPage: React.FC = () => {
         if (record.status === 'pending') {
           return (
             <Space>
-              <a onClick={() => setCompletingBatch(record)}>确认报销</a>
+              <a onClick={() => setCompletingBatch(record)}>确认金额</a>
               <Popconfirm title="确认删除？" onConfirm={() => handleDelete(record.id)}>
                 <a style={{ color: '#ff4d4f' }}>删除</a>
               </Popconfirm>
             </Space>
           );
         }
-        if (record.status === 'completed' && !record.paymentConfirmed) {
+        if (record.status === 'confirmed') {
           return <a onClick={() => setPayingBatch(record)} style={{ color: '#f5222d', fontWeight: 500 }}>确认打款</a>;
         }
-        return <Tag>已完成</Tag>;
+        return <Tag>已打款</Tag>;
       },
     },
   ];
@@ -95,7 +95,7 @@ const ReimbursementPage: React.FC = () => {
             { title: '金额', dataIndex: 'amount', key: 'amount', render: (v: number) => `¥${formatAmount(v)}` },
           ]}
         />
-        {record.status === 'completed' && (
+        {record.status !== 'pending' && (
           <Descriptions size="small" column={4} style={{ marginTop: 8 }}>
             <Descriptions.Item label="报销给">{record.employeeName}</Descriptions.Item>
             <Descriptions.Item label="报销金额">¥{formatAmount(record.actualAmount ?? record.totalAmount)}</Descriptions.Item>

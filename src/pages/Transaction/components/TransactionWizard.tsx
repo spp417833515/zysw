@@ -26,7 +26,7 @@ import dayjs from 'dayjs';
 const { TextArea } = Input;
 
 interface TransactionWizardProps {
-  onSubmit: (values: any) => void;
+  onSubmit: (values: Record<string, unknown>) => void;
   onCancel: () => void;
 }
 

@@ -14,7 +14,7 @@ class TransactionCreate(BaseModel):
     type: str
     amount: float
     date: str
-    categoryId: str = ""
+    categoryId: Optional[str] = None
     accountId: str
     toAccountId: Optional[str] = None
     description: str = ""

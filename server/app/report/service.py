@@ -2,9 +2,31 @@ from typing import Optional
 from sqlalchemy import select, func, and_, case
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.account.models import Account
 from app.category.models import Category
 from app.contact.models import Contact
 from app.transaction.models import Transaction
+
+
+async def _batch_category_names(db: AsyncSession, cat_ids: set) -> dict:
+    if not cat_ids:
+        return {}
+    result = await db.execute(select(Category.id, Category.name, Category.icon, Category.color).where(Category.id.in_(cat_ids)))
+    return {r[0]: {"name": r[1], "icon": r[2], "color": r[3]} for r in result.all()}
+
+
+async def _batch_contact_names(db: AsyncSession, contact_ids: set) -> dict:
+    if not contact_ids:
+        return {}
+    result = await db.execute(select(Contact.id, Contact.name).where(Contact.id.in_(contact_ids)))
+    return {r[0]: r[1] for r in result.all()}
+
+
+async def _batch_account_names(db: AsyncSession, account_ids: set) -> dict:
+    if not account_ids:
+        return {}
+    result = await db.execute(select(Account.id, Account.name).where(Account.id.in_(account_ids)))
+    return {r[0]: r[1] for r in result.all()}
 
 
 async def get_profit_loss(db: AsyncSession, start_date: str, end_date: str) -> dict:
@@ -30,14 +52,7 @@ async def get_profit_loss(db: AsyncSession, start_date: str, end_date: str) -> d
         .where(and_(date_filter, Transaction.type == "income"))
         .group_by(Transaction.category_id)
     )
-    income_categories = []
-    for row in inc_by_cat.all():
-        cat = await db.get(Category, row[0]) if row[0] else None
-        income_categories.append({
-            "categoryId": row[0] or "",
-            "categoryName": cat.name if cat else "未分类",
-            "amount": float(row[1]),
-        })
+    inc_rows = inc_by_cat.all()
 
     # Expense by category
     exp_by_cat = await db.execute(
@@ -45,12 +60,27 @@ async def get_profit_loss(db: AsyncSession, start_date: str, end_date: str) -> d
         .where(and_(date_filter, Transaction.type == "expense"))
         .group_by(Transaction.category_id)
     )
+    exp_rows = exp_by_cat.all()
+
+    # Batch query category names
+    all_cat_ids = {r[0] for r in inc_rows if r[0]} | {r[0] for r in exp_rows if r[0]}
+    cat_map = await _batch_category_names(db, all_cat_ids)
+
+    income_categories = []
+    for row in inc_rows:
+        cat_info = cat_map.get(row[0], {})
+        income_categories.append({
+            "categoryId": row[0] or "",
+            "categoryName": cat_info.get("name", "未分类"),
+            "amount": float(row[1]),
+        })
+
     expense_categories = []
-    for row in exp_by_cat.all():
-        cat = await db.get(Category, row[0]) if row[0] else None
+    for row in exp_rows:
+        cat_info = cat_map.get(row[0], {})
         expense_categories.append({
             "categoryId": row[0] or "",
-            "categoryName": cat.name if cat else "未分类",
+            "categoryName": cat_info.get("name", "未分类"),
             "amount": float(row[1]),
         })
 
@@ -90,19 +120,23 @@ async def get_cash_flow(db: AsyncSession, start_date: str, end_date: str) -> dic
         .where(date_filter)
         .group_by(Transaction.account_id)
     )
-    from app.account.models import Account
+    acc_rows = by_account_result.all()
+
+    # Batch query account names
+    acc_ids = {r[0] for r in acc_rows if r[0]}
+    acc_map = await _batch_account_names(db, acc_ids)
+
     by_account = []
-    for row in by_account_result.all():
-        acc = await db.get(Account, row[0]) if row[0] else None
+    for row in acc_rows:
         by_account.append({
             "accountId": row[0] or "",
-            "accountName": acc.name if acc else "未知账户",
+            "accountName": acc_map.get(row[0], "未知账户"),
             "inflow": float(row[1]),
             "outflow": float(row[2]),
             "net": float(row[1]) - float(row[2]),
         })
 
-    # By month - use substr for SQLite compatibility
+    # By month
     by_month_result = await db.execute(
         select(
             func.substr(Transaction.date, 1, 7).label("month"),
@@ -143,18 +177,23 @@ async def get_category_report(db: AsyncSession, start_date: str, end_date: str, 
         .group_by(Transaction.category_id)
         .order_by(func.sum(Transaction.amount).desc())
     )
+    rows = result.all()
+
+    # Batch query category names
+    cat_ids = {r[0] for r in rows if r[0]}
+    cat_map = await _batch_category_names(db, cat_ids)
 
     categories = []
     grand_total = 0.0
-    for row in result.all():
-        cat = await db.get(Category, row[0]) if row[0] else None
+    for row in rows:
+        cat_info = cat_map.get(row[0], {})
         amount = float(row[1])
         grand_total += amount
         categories.append({
             "categoryId": row[0] or "",
-            "categoryName": cat.name if cat else "未分类",
-            "icon": cat.icon if cat else "",
-            "color": cat.color if cat else "",
+            "categoryName": cat_info.get("name", "未分类"),
+            "icon": cat_info.get("icon", ""),
+            "color": cat_info.get("color", ""),
             "amount": amount,
         })
 
@@ -209,15 +248,20 @@ async def get_receivables(db: AsyncSession) -> dict:
         .group_by(Transaction.contact_id)
         .order_by(func.sum(Transaction.amount).desc())
     )
+    rows = result.all()
+
+    # Batch query contact names
+    contact_ids = {r[0] for r in rows if r[0]}
+    contact_map = await _batch_contact_names(db, contact_ids)
+
     items = []
     grand_total = 0.0
-    for row in result.all():
-        contact = await db.get(Contact, row[0]) if row[0] else None
+    for row in rows:
         amount = float(row[1])
         grand_total += amount
         items.append({
             "contactId": row[0] or "",
-            "contactName": contact.name if contact else "未指定客户",
+            "contactName": contact_map.get(row[0], "未指定客户") if row[0] else "未指定客户",
             "amount": amount,
             "count": row[2],
             "earliestDate": row[3],
@@ -238,15 +282,20 @@ async def get_payables(db: AsyncSession) -> dict:
         .group_by(Transaction.contact_id)
         .order_by(func.sum(Transaction.amount).desc())
     )
+    rows = result.all()
+
+    # Batch query contact names
+    contact_ids = {r[0] for r in rows if r[0]}
+    contact_map = await _batch_contact_names(db, contact_ids)
+
     items = []
     grand_total = 0.0
-    for row in result.all():
-        contact = await db.get(Contact, row[0]) if row[0] else None
+    for row in rows:
         amount = float(row[1])
         grand_total += amount
         items.append({
             "contactId": row[0] or "",
-            "contactName": contact.name if contact else "未指定供应商",
+            "contactName": contact_map.get(row[0], "未指定供应商") if row[0] else "未指定供应商",
             "amount": amount,
             "count": row[2],
             "earliestDate": row[3],

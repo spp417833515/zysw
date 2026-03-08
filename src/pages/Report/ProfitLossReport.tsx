@@ -17,6 +17,14 @@ interface CategoryItem {
   amount: number;
 }
 
+interface ProfitLossRow {
+  key: string;
+  name: string;
+  amount: number | null;
+  isGroup: boolean;
+  isTotal?: boolean;
+}
+
 const ProfitLossReport: React.FC = () => {
   const [dateRange, setDateRange] = useState<[string, string]>([
     dayjs().startOf('month').format('YYYY-MM-DD'),
@@ -33,7 +41,7 @@ const ProfitLossReport: React.FC = () => {
     const fetch = async () => {
       setLoading(true);
       try {
-        const res: any = await getProfitLossReport({ startDate: dateRange[0], endDate: dateRange[1] });
+        const res = await getProfitLossReport({ startDate: dateRange[0], endDate: dateRange[1] });
         const d = res.data;
         setTotalIncome(d.totalIncome ?? 0);
         setTotalExpense(d.totalExpense ?? 0);
@@ -72,7 +80,7 @@ const ProfitLossReport: React.FC = () => {
       title: '项目',
       dataIndex: 'name',
       key: 'name',
-      render: (text: string, record: any) => (
+      render: (text: string, record: ProfitLossRow) => (
         <Text strong={record.isGroup || record.isTotal}>{text}</Text>
       ),
     },
@@ -82,7 +90,7 @@ const ProfitLossReport: React.FC = () => {
       key: 'amount',
       align: 'right' as const,
       width: 200,
-      render: (val: number | null, record: any) => {
+      render: (val: number | null, record: ProfitLossRow) => {
         if (val === null) return '-';
         const color = record.isTotal && record.isGroup
           ? val >= 0 ? semanticColors.income : semanticColors.expense

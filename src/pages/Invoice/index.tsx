@@ -21,7 +21,7 @@ const InvoicePage: React.FC = () => {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const res: any = await getInvoices();
+      const res = await getInvoices();
       setInvoices(res.data ?? []);
     } finally {
       setLoading(false);
@@ -61,7 +61,7 @@ const InvoicePage: React.FC = () => {
       cancelText: '取消',
       async onOk() {
         try {
-          const res: any = await deleteInvoice(invoice.id);
+          const res = await deleteInvoice(invoice.id);
           if (res.code === 0) {
             message.success('发票已删除');
             fetchData();

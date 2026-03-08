@@ -45,7 +45,7 @@ export interface Transaction {
 
   // Reimbursement fields
   reimbursementBatchId?: string;
-  reimbursementStatus?: 'pending' | 'completed' | null;
+  reimbursementStatus?: 'pending' | 'confirmed' | 'paid' | null;
 }
 
 export interface Attachment {

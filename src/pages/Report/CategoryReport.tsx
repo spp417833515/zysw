@@ -35,11 +35,11 @@ const CategoryReport: React.FC = () => {
     const fetch = async () => {
       setLoading(true);
       try {
-        const [expRes, incRes]: any[] = await Promise.all([
+        const [expRes, incRes] = await Promise.all([
           getCategoryReport({ startDate: dateRange[0], endDate: dateRange[1], type: 'expense' }),
           getCategoryReport({ startDate: dateRange[0], endDate: dateRange[1], type: 'income' }),
         ]);
-        const mapItems = (cats: any[]) => cats.map((c: any) => ({
+        const mapItems = (cats: { categoryId: string; categoryName: string; amount: number; percentage: number }[]) => cats.map((c) => ({
           key: c.categoryId || c.categoryName,
           categoryName: c.categoryName,
           amount: c.amount,

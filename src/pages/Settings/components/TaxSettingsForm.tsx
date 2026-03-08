@@ -119,7 +119,7 @@ const TaxSettingsForm: React.FC = () => {
             precision={2}
             style={{ width: '100%' }}
             formatter={(value) => `${(Number(value) * 100).toFixed(0)}%`}
-            parser={(value) => Number(value?.replace('%', '')) / 100}
+            parser={(value) => Number(value?.replace('%', '')) / 100 as unknown as 0}
           />
         </Form.Item>
 
@@ -153,7 +153,7 @@ const TaxSettingsForm: React.FC = () => {
             precision={2}
             style={{ width: '100%' }}
             formatter={(value) => `${(Number(value) * 100).toFixed(0)}%`}
-            parser={(value) => Number(value?.replace('%', '')) / 100}
+            parser={(value) => Number(value?.replace('%', '')) / 100 as unknown as 0}
           />
         </Form.Item>
 

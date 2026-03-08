@@ -43,7 +43,7 @@ const CashFlowReport: React.FC = () => {
     const fetch = async () => {
       setLoading(true);
       try {
-        const res: any = await getCashFlowReport({ startDate: dateRange[0], endDate: dateRange[1] });
+        const res = await getCashFlowReport({ startDate: dateRange[0], endDate: dateRange[1] });
         const d = res.data;
         setInflow(d.inflow ?? 0);
         setOutflow(d.outflow ?? 0);
@@ -91,7 +91,7 @@ const CashFlowReport: React.FC = () => {
       title: '账户',
       dataIndex: 'name',
       key: 'name',
-      render: (text: string, record: any) => <Text strong={record.isGroup}>{text}</Text>,
+      render: (text: string, record: { key: string; name: string; inflow: number; outflow: number; net: number; isGroup: boolean }) => <Text strong={record.isGroup}>{text}</Text>,
     },
     {
       title: '流入（元）',

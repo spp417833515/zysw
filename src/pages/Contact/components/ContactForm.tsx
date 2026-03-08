@@ -7,7 +7,7 @@ const { TextArea } = Input;
 interface ContactFormProps {
   open: boolean;
   editingContact?: Contact | null;
-  onOk: (values: any) => void;
+  onOk: (values: Record<string, unknown>) => void;
   onCancel: () => void;
   loading?: boolean;
 }

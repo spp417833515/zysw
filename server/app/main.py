@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from app.config import UPLOAD_DIR
+from app.config import UPLOAD_DIR, settings
 from app.database import Base, async_session, engine
 
 
@@ -23,7 +23,7 @@ app = FastAPI(title="小微企业财务记账系统", version="1.0.0", lifespan=
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[o.strip() for o in settings.CORS_ORIGINS.split(",") if o.strip()],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -54,6 +54,7 @@ from app.settings.router import router as settings_router  # noqa: E402
 from app.reimbursement.router import router as reimbursement_router  # noqa: E402
 from app.contact.router import router as contact_router  # noqa: E402
 from app.employee.router import router as employee_router  # noqa: E402
+from app.dashboard.router import router as dashboard_router  # noqa: E402
 
 app.include_router(account_router)
 app.include_router(category_router)
@@ -67,6 +68,7 @@ app.include_router(settings_router)
 app.include_router(reimbursement_router)
 app.include_router(contact_router)
 app.include_router(employee_router)
+app.include_router(dashboard_router)
 
 # Serve uploaded files
 app.mount("/uploads", StaticFiles(directory=str(UPLOAD_DIR)), name="uploads")
@@ -74,6 +76,5 @@ app.mount("/uploads", StaticFiles(directory=str(UPLOAD_DIR)), name="uploads")
 
 if __name__ == "__main__":
     import uvicorn
-    from app.config import settings
 
     uvicorn.run("app.main:app", host="0.0.0.0", port=settings.PORT, reload=True)

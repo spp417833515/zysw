@@ -1,22 +1,23 @@
 import request from './request';
 import type { Account } from '@/types/account';
+import type { ApiResponse } from '@/types/common';
 
 export function getAccounts() {
-  return request.get('/accounts');
+  return request.get<ApiResponse<Account[]>>('/accounts');
 }
 
 export function getAccountById(id: string) {
-  return request.get(`/accounts/${id}`);
+  return request.get<ApiResponse<Account>>(`/accounts/${id}`);
 }
 
 export function createAccount(data: Partial<Account>) {
-  return request.post('/accounts', data);
+  return request.post<ApiResponse<Account>>('/accounts', data);
 }
 
 export function updateAccount(id: string, data: Partial<Account>) {
-  return request.put(`/accounts/${id}`, data);
+  return request.put<ApiResponse<Account>>(`/accounts/${id}`, data);
 }
 
 export function deleteAccount(id: string) {
-  return request.delete(`/accounts/${id}`);
+  return request.delete<ApiResponse<null>>(`/accounts/${id}`);
 }

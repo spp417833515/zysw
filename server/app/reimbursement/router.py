@@ -41,7 +41,7 @@ async def complete_batch(batch_id: str, data: ReimbursementComplete, db: AsyncSe
     except ValueError as e:
         return error(str(e))
     if not batch:
-        return error("报销单不存在或已完成")
+        return error("报销单不存在或非待确认状态")
     return success(batch)
 
 
@@ -49,7 +49,7 @@ async def complete_batch(batch_id: str, data: ReimbursementComplete, db: AsyncSe
 async def delete_batch(batch_id: str, db: AsyncSession = Depends(get_db)):
     deleted = await service.delete_batch(db, batch_id)
     if not deleted:
-        return error("报销单不存在或已完成，无法删除")
+        return error("报销单不存在或非待确认状态，无法删除")
     return success(None)
 
 

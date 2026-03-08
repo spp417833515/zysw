@@ -13,6 +13,7 @@ import {
 interface ReimbursementState {
   batches: ReimbursementBatch[];
   loading: boolean;
+  error: string | null;
   pendingCount: number;
   unpaidCount: number;
   unpaidAmount: number;
@@ -28,55 +29,56 @@ interface ReimbursementState {
 export const useReimbursementStore = create<ReimbursementState>((set) => ({
   batches: [],
   loading: false,
+  error: null,
   pendingCount: 0,
   unpaidCount: 0,
   unpaidAmount: 0,
 
   fetchBatches: async () => {
-    set({ loading: true });
+    set({ loading: true, error: null });
     try {
-      const res: any = await getReimbursements();
+      const res = await getReimbursements();
       set({ batches: res.data ?? [], loading: false });
-    } catch {
-      set({ loading: false });
+    } catch (e) {
+      set({ loading: false, error: e instanceof Error ? e.message : '加载报销失败' });
     }
   },
 
   fetchPendingCount: async () => {
     try {
-      const res: any = await getPendingReimbursementCount();
+      const res = await getPendingReimbursementCount();
       set({ pendingCount: res.data ?? 0 });
-    } catch {}
+    } catch { /* ignore */ }
   },
 
   fetchUnpaidInfo: async () => {
     try {
-      const res: any = await getUnpaidReimbursements();
+      const res = await getUnpaidReimbursements();
       set({ unpaidCount: res.data?.count ?? 0, unpaidAmount: res.data?.totalAmount ?? 0 });
-    } catch {}
+    } catch { /* ignore */ }
   },
 
   createBatch: async (data) => {
     await createReimbursement(data);
-    const res: any = await getReimbursements();
+    const res = await getReimbursements();
     set({ batches: res.data ?? [] });
   },
 
   completeBatch: async (id, data) => {
     await completeReimbursement(id, data);
-    const res: any = await getReimbursements();
+    const res = await getReimbursements();
     set({ batches: res.data ?? [] });
   },
 
   confirmPayment: async (id, accountId) => {
     await confirmReimbursementPayment(id, { accountId });
-    const res: any = await getReimbursements();
+    const res = await getReimbursements();
     set({ batches: res.data ?? [] });
   },
 
   deleteBatch: async (id) => {
     await deleteReimbursement(id);
-    const res: any = await getReimbursements();
+    const res = await getReimbursements();
     set({ batches: res.data ?? [] });
   },
 }));

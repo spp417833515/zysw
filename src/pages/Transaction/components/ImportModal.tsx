@@ -6,6 +6,7 @@ import { batchCreateTransactions } from '@/api/transaction';
 import { useAccountStore } from '@/store/useAccountStore';
 import { useCategoryStore } from '@/store/useCategoryStore';
 import type { ExportColumn } from '@/utils/export';
+import type { Transaction } from '@/types/transaction';
 
 interface ImportModalProps {
   open: boolean;
@@ -35,7 +36,7 @@ const ImportModal: React.FC<ImportModalProps> = ({ open, onClose, onSuccess }) =
   const [step, setStep] = useState(0);
   const [rawData, setRawData] = useState<Record<string, string>[]>([]);
   const [mapping, setMapping] = useState<Record<string, string>>({});
-  const [result, setResult] = useState<{ created: number; errors: any[] } | null>(null);
+  const [result, setResult] = useState<{ created: number; errors: { index: number; error: string }[] } | null>(null);
   const [loading, setLoading] = useState(false);
 
   const accounts = useAccountStore((s) => s.accounts);
@@ -82,12 +83,12 @@ const ImportModal: React.FC<ImportModalProps> = ({ open, onClose, onSuccess }) =
     const findCategory = (name: string) => categories.find((c) => c.name === name)?.id || '';
 
     return rawData.map((row) => {
-      const mapped: Record<string, any> = {};
+      const mapped: Record<string, string> = {};
       for (const [header, field] of Object.entries(mapping)) {
         mapped[field] = row[header] || '';
       }
       return {
-        type: mapped.type || 'expense',
+        type: (mapped.type || 'expense') as Transaction['type'],
         amount: parseFloat(mapped.amount) || 0,
         date: mapped.date || new Date().toISOString().slice(0, 10),
         categoryId: findCategory(mapped.categoryName || ''),
@@ -102,8 +103,8 @@ const ImportModal: React.FC<ImportModalProps> = ({ open, onClose, onSuccess }) =
   const handleImport = async () => {
     setLoading(true);
     try {
-      const res: any = await batchCreateTransactions(previewData);
-      setResult(res.data);
+      const res = await batchCreateTransactions(previewData);
+      setResult(res.data ?? null);
       setStep(3);
       onSuccess();
     } catch {

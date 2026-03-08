@@ -10,6 +10,7 @@ import {
 interface ContactState {
   contacts: Contact[];
   loading: boolean;
+  error: string | null;
   fetchContacts: (type?: string) => Promise<void>;
   addContact: (data: Partial<Contact>) => Promise<void>;
   updateContact: (id: string, data: Partial<Contact>) => Promise<void>;
@@ -19,23 +20,24 @@ interface ContactState {
 export const useContactStore = create<ContactState>((set) => ({
   contacts: [],
   loading: false,
+  error: null,
   fetchContacts: async (type?: string) => {
-    set({ loading: true });
+    set({ loading: true, error: null });
     try {
-      const res: any = await getAllContacts(type);
+      const res = await getAllContacts(type);
       set({ contacts: res.data ?? [], loading: false });
-    } catch {
-      set({ loading: false });
+    } catch (e) {
+      set({ loading: false, error: e instanceof Error ? e.message : '加载联系人失败' });
     }
   },
   addContact: async (data) => {
-    const res: any = await createContact(data);
+    const res = await createContact(data);
     if (res.code === 0) {
       set((s) => ({ contacts: [...s.contacts, res.data] }));
     }
   },
   updateContact: async (id, data) => {
-    const res: any = await apiUpdateContact(id, data);
+    const res = await apiUpdateContact(id, data);
     if (res.code === 0) {
       set((s) => ({
         contacts: s.contacts.map((c) => (c.id === id ? res.data : c)),
@@ -43,7 +45,7 @@ export const useContactStore = create<ContactState>((set) => ({
     }
   },
   deleteContact: async (id) => {
-    const res: any = await apiDeleteContact(id);
+    const res = await apiDeleteContact(id);
     if (res.code === 0) {
       set((s) => ({ contacts: s.contacts.filter((c) => c.id !== id) }));
     } else {

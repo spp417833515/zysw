@@ -26,7 +26,7 @@ const { Text } = Typography;
 
 interface TransactionFormProps {
   initialValues?: Partial<Transaction>;
-  onSubmit: (values: any) => void;
+  onSubmit: (values: Record<string, unknown>) => void;
   onCancel: () => void;
 }
 
@@ -56,13 +56,15 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
     }
   }, [initialValues, form]);
 
-  const handleFinish = (values: any) => {
-    const invoiceImages = values.invoiceImages || [];
+  const handleFinish = (values: Record<string, unknown>) => {
+    const invoiceImages = (values.invoiceImages || []) as unknown[];
+    const date = values.date as dayjs.Dayjs | undefined;
+    const companyAccountDate = values.companyAccountDate as dayjs.Dayjs | undefined;
     const submitData = {
       ...values,
-      date: values.date ? values.date.format('YYYY-MM-DD') : undefined,
-      companyAccountDate: values.companyAccountDate
-        ? values.companyAccountDate.format('YYYY-MM-DD')
+      date: date ? date.format('YYYY-MM-DD') : undefined,
+      companyAccountDate: companyAccountDate
+        ? companyAccountDate.format('YYYY-MM-DD')
         : undefined,
       invoiceIssued: invoiceImages.length > 0,
     };

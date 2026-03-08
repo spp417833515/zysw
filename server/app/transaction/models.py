@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Optional
 
-from sqlalchemy import Boolean, Float, Integer, String, Text
+from sqlalchemy import Boolean, Integer, Numeric, String, Text, ForeignKey, Index
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
@@ -10,14 +10,25 @@ from app.database import Base
 
 class Transaction(Base):
     __tablename__ = "transactions"
+    __table_args__ = (
+        Index("ix_transactions_date", "date"),
+        Index("ix_transactions_type", "type"),
+        Index("ix_transactions_account_id", "account_id"),
+        Index("ix_transactions_category_id", "category_id"),
+        Index("ix_transactions_contact_id", "contact_id"),
+        Index("ix_transactions_payment_confirmed", "payment_confirmed"),
+        Index("ix_transactions_tax_declared", "tax_declared"),
+        Index("ix_transactions_invoice_pending", "invoice_needed", "invoice_completed"),
+        Index("ix_transactions_reimbursement_batch_id", "reimbursement_batch_id"),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     type: Mapped[str] = mapped_column(String(20), nullable=False)  # income | expense | transfer
-    amount: Mapped[float] = mapped_column(Float, nullable=False)
+    amount: Mapped[float] = mapped_column(Numeric(12, 2), nullable=False)
     date: Mapped[str] = mapped_column(String(30), nullable=False)
-    category_id: Mapped[str] = mapped_column(String(36), default="")
-    account_id: Mapped[str] = mapped_column(String(36), nullable=False)
-    to_account_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True, default=None)
+    category_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True, default=None)
+    account_id: Mapped[str] = mapped_column(String(36), ForeignKey("accounts.id"), nullable=False)
+    to_account_id: Mapped[Optional[str]] = mapped_column(String(36), ForeignKey("accounts.id"), nullable=True, default=None)
     description: Mapped[str] = mapped_column(String(500), default="")
     tags: Mapped[str] = mapped_column(Text, default="[]")  # JSON array stored as text
     invoice_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True, default=None)

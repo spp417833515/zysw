@@ -26,6 +26,7 @@ function flattenTree(nodes: Category[], parentId: string | null = null): Categor
 interface CategoryState {
   categories: Category[];
   loading: boolean;
+  error: string | null;
   fetchCategories: () => Promise<void>;
   addCategory: (c: Omit<Category, 'id' | 'createdAt'>) => Promise<void>;
   updateCategory: (id: string, c: Partial<Category>) => Promise<void>;
@@ -35,25 +36,26 @@ interface CategoryState {
 export const useCategoryStore = create<CategoryState>((set) => ({
   categories: [],
   loading: false,
+  error: null,
   fetchCategories: async () => {
-    set({ loading: true });
+    set({ loading: true, error: null });
     try {
-      const res: any = await getCategories();
+      const res = await getCategories();
       const tree: Category[] = res.data ?? [];
       set({ categories: flattenTree(tree), loading: false });
-    } catch {
-      set({ loading: false });
+    } catch (e) {
+      set({ loading: false, error: e instanceof Error ? e.message : '加载分类失败' });
     }
   },
   addCategory: async (c) => {
-    const res: any = await createCategory(c as any);
+    const res = await createCategory(c);
     if (res.code === 0) {
       const { children: _, ...flat } = res.data;
       set((s) => ({ categories: [...s.categories, flat as Category] }));
     }
   },
   updateCategory: async (id, updates) => {
-    const res: any = await apiUpdateCategory(id, updates as any);
+    const res = await apiUpdateCategory(id, updates);
     if (res.code === 0) {
       const { children: _, ...flat } = res.data;
       set((s) => ({
@@ -64,7 +66,7 @@ export const useCategoryStore = create<CategoryState>((set) => ({
     }
   },
   deleteCategory: async (id) => {
-    const res: any = await apiDeleteCategory(id);
+    const res = await apiDeleteCategory(id);
     if (res.code === 0) {
       set((s) => ({ categories: s.categories.filter((c) => c.id !== id) }));
     } else {

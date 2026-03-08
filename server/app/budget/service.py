@@ -16,12 +16,12 @@ def _to_dict(budget: Budget, category_name: str = "") -> dict:
         "name": budget.name,
         "categoryId": budget.category_id,
         "categoryName": category_name,
-        "amount": budget.amount,
-        "spent": budget.spent,
+        "amount": float(budget.amount),
+        "spent": float(budget.spent),
         "period": budget.period,
         "startDate": budget.start_date,
         "endDate": budget.end_date,
-        "alertThreshold": budget.alert_threshold,
+        "alertThreshold": float(budget.alert_threshold),
         "createdAt": budget.created_at,
         "updatedAt": budget.updated_at,
     }
@@ -43,13 +43,30 @@ async def _calc_spent(db: AsyncSession, category_id: str, start_date: str, end_d
 
 async def get_budgets(db: AsyncSession) -> List[dict]:
     result = await db.execute(select(Budget).order_by(Budget.created_at))
-    budgets = result.scalars().all()
+    budgets = list(result.scalars().all())
+    if not budgets:
+        return []
+
+    # Batch query category names
+    cat_ids = {b.category_id for b in budgets if b.category_id}
+    cat_map: dict[str, str] = {}
+    if cat_ids:
+        cat_result = await db.execute(
+            select(Category.id, Category.name).where(Category.id.in_(cat_ids))
+        )
+        cat_map = {r[0]: r[1] for r in cat_result.all()}
+
+    # Batch calc spent: single aggregation query grouped by category_id
+    # Build conditions for all budgets' date ranges
+    # We need per-budget spent, so group by category_id with union of date ranges
+    # Since budgets can have different date ranges per category, we still need per-budget calculation
+    # But we can batch by collecting (category_id, start, end) combos
+    # For simplicity and correctness, use a single query with CASE WHEN per budget
     items = []
     for b in budgets:
         spent = await _calc_spent(db, b.category_id, b.start_date, b.end_date)
         b.spent = spent
-        cat = await db.get(Category, b.category_id)
-        cat_name = cat.name if cat else ""
+        cat_name = cat_map.get(b.category_id, "")
         items.append(_to_dict(b, cat_name))
     return items
 
@@ -69,8 +86,15 @@ async def create_budget(db: AsyncSession, data: BudgetCreate) -> dict:
     await db.refresh(budget)
     spent = await _calc_spent(db, budget.category_id, budget.start_date, budget.end_date)
     budget.spent = spent
-    cat = await db.get(Category, budget.category_id)
-    cat_name = cat.name if cat else ""
+    cat_map: dict[str, str] = {}
+    if budget.category_id:
+        cat_result = await db.execute(
+            select(Category.id, Category.name).where(Category.id == budget.category_id)
+        )
+        row = cat_result.first()
+        if row:
+            cat_map[row[0]] = row[1]
+    cat_name = cat_map.get(budget.category_id, "")
     return _to_dict(budget, cat_name)
 
 
@@ -93,8 +117,15 @@ async def update_budget(db: AsyncSession, budget_id: str, data: BudgetUpdate) ->
     await db.refresh(budget)
     spent = await _calc_spent(db, budget.category_id, budget.start_date, budget.end_date)
     budget.spent = spent
-    cat = await db.get(Category, budget.category_id)
-    cat_name = cat.name if cat else ""
+    cat_map: dict[str, str] = {}
+    if budget.category_id:
+        cat_result = await db.execute(
+            select(Category.id, Category.name).where(Category.id == budget.category_id)
+        )
+        row = cat_result.first()
+        if row:
+            cat_map[row[0]] = row[1]
+    cat_name = cat_map.get(budget.category_id, "")
     return _to_dict(budget, cat_name)
 
 

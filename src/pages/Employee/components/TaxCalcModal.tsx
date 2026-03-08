@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Modal, InputNumber, Descriptions, Typography } from 'antd';
 import { calcTax } from '@/api/employee';
+import type { TaxInfo } from '@/types/employee';
 
 const { Text } = Typography;
 
@@ -18,13 +19,13 @@ const TaxCalcModal: React.FC<Props> = ({ open, onCancel, defaultSalary = 8000, d
   const [socialRate, setSocialRate] = useState(defaultSocialRate);
   const [fundRate, setFundRate] = useState(defaultFundRate);
   const [specialDed, setSpecialDed] = useState(defaultSpecialDeduction);
-  const [result, setResult] = useState<any>(null);
+  const [result, setResult] = useState<TaxInfo | null>(null);
   const [loading, setLoading] = useState(false);
 
   const handleCalc = async () => {
     setLoading(true);
     try {
-      const res: any = await calcTax({ salary, socialInsuranceRate: socialRate, housingFundRate: fundRate, specialDeduction: specialDed });
+      const res = await calcTax({ salary, socialInsuranceRate: socialRate, housingFundRate: fundRate, specialDeduction: specialDed });
       setResult(res.data);
     } finally {
       setLoading(false);

@@ -10,6 +10,7 @@ import {
 interface AccountState {
   accounts: Account[];
   loading: boolean;
+  error: string | null;
   fetchAccounts: () => Promise<void>;
   addAccount: (a: Omit<Account, 'id' | 'createdAt' | 'updatedAt'>) => Promise<void>;
   updateAccount: (id: string, a: Partial<Account>) => Promise<void>;
@@ -19,23 +20,24 @@ interface AccountState {
 export const useAccountStore = create<AccountState>((set) => ({
   accounts: [],
   loading: false,
+  error: null,
   fetchAccounts: async () => {
-    set({ loading: true });
+    set({ loading: true, error: null });
     try {
-      const res: any = await getAccounts();
+      const res = await getAccounts();
       set({ accounts: res.data ?? [], loading: false });
-    } catch {
-      set({ loading: false });
+    } catch (e) {
+      set({ loading: false, error: e instanceof Error ? e.message : '加载账户失败' });
     }
   },
   addAccount: async (a) => {
-    const res: any = await createAccount(a as any);
+    const res = await createAccount(a);
     if (res.code === 0) {
       set((s) => ({ accounts: [...s.accounts, res.data] }));
     }
   },
   updateAccount: async (id, updates) => {
-    const res: any = await apiUpdateAccount(id, updates as any);
+    const res = await apiUpdateAccount(id, updates);
     if (res.code === 0) {
       set((s) => ({
         accounts: s.accounts.map((a) => (a.id === id ? res.data : a)),
@@ -43,7 +45,7 @@ export const useAccountStore = create<AccountState>((set) => ({
     }
   },
   deleteAccount: async (id) => {
-    const res: any = await apiDeleteAccount(id);
+    const res = await apiDeleteAccount(id);
     if (res.code === 0) {
       set((s) => ({ accounts: s.accounts.filter((a) => a.id !== id) }));
     } else {

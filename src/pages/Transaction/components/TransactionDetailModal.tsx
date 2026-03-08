@@ -23,7 +23,7 @@ const TransactionDetailModal: React.FC<TransactionDetailModalProps> = ({
     return transactions.find((t) => t.id === transactionId);
   }, [transactions, transactionId]);
 
-  const handleSubmit = async (values: any) => {
+  const handleSubmit = async (values: Record<string, unknown>) => {
     if (!transactionId) return;
     try {
       await updateTransaction(transactionId, values);

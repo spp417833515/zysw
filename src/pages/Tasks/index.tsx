@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Tabs, Card, Row, Col, Statistic, Table, Button, Space, Tag, Typography } from 'antd';
+import { Tabs, Card, Row, Col, Statistic, Table, Button, Space, Tag } from 'antd';
 import {
   DollarOutlined,
   FileTextOutlined,
@@ -19,7 +19,7 @@ import {
 } from '@/store/useTransactionStore';
 import { useRecurringExpenseStore } from '@/store/useRecurringExpenseStore';
 import { TRANSACTION_TYPE_MAP } from '@/utils/constants';
-import { formatDate, formatAmount } from '@/utils/format';
+import { formatDate } from '@/utils/format';
 import { computeReminders, computeRecurringReminders, REMINDER_TYPE_LABELS } from '@/utils/reminder';
 import type { ReminderItem, RecurringReminderItem } from '@/utils/reminder';
 import { useThemeToken } from '@/hooks/useThemeToken';
@@ -29,7 +29,9 @@ import InvoiceConfirmModal from './components/InvoiceConfirmModal';
 import TaxDeclareModal from './components/TaxDeclareModal';
 import SalaryConfirmModal from './components/SalaryConfirmModal';
 import TransactionDetailModal from '@/pages/Transaction/components/TransactionDetailModal';
-import { getUnpaidSalaries } from '@/api/employee';
+import { useUnpaidSalaries } from '@/hooks/useUnpaidSalaries';
+import { baseUnpaidSalaryColumns, makeUnpaidActionColumn } from '@/pages/shared/unpaidSalaryColumns';
+import type { Transaction } from '@/types/transaction';
 import type { UnpaidSalaryItem } from '@/types/employee';
 
 const Tasks: React.FC = () => {
@@ -56,20 +58,9 @@ const Tasks: React.FC = () => {
   const [detailId, setDetailId] = useState<string | null>(null);
 
   // 待开工资
-  const [unpaidItems, setUnpaidItems] = useState<UnpaidSalaryItem[]>([]);
-  const [unpaidLoading, setUnpaidLoading] = useState(false);
+  const { unpaidItems, unpaidLoading, fetchUnpaid } = useUnpaidSalaries();
   const [salaryModalOpen, setSalaryModalOpen] = useState(false);
   const [payingItem, setPayingItem] = useState<UnpaidSalaryItem | null>(null);
-
-  const fetchUnpaid = async () => {
-    setUnpaidLoading(true);
-    try {
-      const res: any = await getUnpaidSalaries();
-      setUnpaidItems(res.data?.items ?? []);
-    } finally {
-      setUnpaidLoading(false);
-    }
-  };
 
   useEffect(() => {
     fetchPendingData();
@@ -100,7 +91,7 @@ const Tasks: React.FC = () => {
       dataIndex: 'amount',
       key: 'amount',
       width: 120,
-      render: (v: number, r: any) => <AmountText value={v} type={r.type} />,
+      render: (v: number, r: Transaction) => <AmountText value={v} type={r.type} />,
     },
     {
       title: '描述',
@@ -117,11 +108,11 @@ const Tasks: React.FC = () => {
     },
   ];
 
-  const makeActionColumn = (label: string, onAction: (record: any) => void) => ({
+  const makeActionColumn = (label: string, onAction: (record: Transaction) => void) => ({
     title: '操作',
     key: 'action',
     width: 160,
-    render: (_: unknown, record: any) => (
+    render: (_: unknown, record: Transaction) => (
       <Space>
         <Button type="primary" size="small" onClick={() => onAction(record)}>{label}</Button>
         <Button size="small" onClick={() => setDetailId(record.id)}>详情</Button>
@@ -269,24 +260,8 @@ const Tasks: React.FC = () => {
   ];
 
   const unpaidSalaryColumns = [
-    { title: '员工', dataIndex: 'employeeName', key: 'employeeName', width: 100 },
-    { title: '年份', dataIndex: 'year', key: 'year', width: 80 },
-    { title: '月份', dataIndex: 'month', key: 'month', width: 80, render: (v: number) => `${v}月` },
-    {
-      title: '应发工资', dataIndex: 'baseSalary', key: 'baseSalary', width: 120,
-      render: (v: number) => <Typography.Text type="danger">¥{formatAmount(v)}</Typography.Text>,
-    },
-    {
-      title: '操作', key: 'action', width: 120,
-      render: (_: unknown, record: UnpaidSalaryItem) => (
-        <Button
-          type="primary" danger size="small"
-          onClick={() => { setPayingItem(record); setSalaryModalOpen(true); }}
-        >
-          确认发放
-        </Button>
-      ),
-    },
+    ...baseUnpaidSalaryColumns,
+    makeUnpaidActionColumn((record) => { setPayingItem(record); setSalaryModalOpen(true); }),
   ];
 
   const tabItems = [

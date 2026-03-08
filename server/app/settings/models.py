@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import String, Text, Float, Boolean
+from sqlalchemy import String, Text, Numeric, Boolean
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
@@ -28,11 +28,11 @@ class TaxSettings(Base):
     id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
 
     # 增值税设置
-    vat_rate: Mapped[float] = mapped_column(Float, default=0.03)  # 增值税率，默认3%
-    vat_threshold_quarterly: Mapped[float] = mapped_column(Float, default=300000.0)  # 季度免征额，默认30万
+    vat_rate: Mapped[float] = mapped_column(Numeric(6, 4), default=0.03)  # 增值税率，默认3%
+    vat_threshold_quarterly: Mapped[float] = mapped_column(Numeric(12, 2), default=300000.0)  # 季度免征额，默认30万
 
     # 附加税设置（基于增值税）
-    additional_tax_rate: Mapped[float] = mapped_column(Float, default=0.12)  # 附加税率，默认12%
+    additional_tax_rate: Mapped[float] = mapped_column(Numeric(6, 4), default=0.12)  # 附加税率，默认12%
 
     # 企业所得税设置
     income_tax_enabled: Mapped[bool] = mapped_column(Boolean, default=True)  # 是否启用企业所得税
