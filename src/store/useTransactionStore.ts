@@ -10,6 +10,7 @@ import {
   confirmInvoice as apiConfirmInvoice,
   skipInvoice as apiSkipInvoice,
   confirmTax as apiConfirmTax,
+  batchConfirmTax as apiBatchConfirmTax,
   getPendingPayments,
   getPendingInvoices,
   getPendingTaxes,
@@ -42,6 +43,7 @@ interface TransactionState {
   confirmInvoice: (id: string, invoiceId?: string) => Promise<void>;
   skipInvoice: (id: string) => Promise<void>;
   confirmTaxDeclare: (id: string, taxPeriod: string) => Promise<void>;
+  batchConfirmTaxDeclare: (taxPeriod: string) => Promise<{ count: number; declaredAt: string }>;
 }
 
 const defaultFilter: TransactionFilter = {};
@@ -179,6 +181,15 @@ export const useTransactionStore = create<TransactionState>((set, get) => ({
       }));
       get().fetchPendingData();
     }
+  },
+
+  batchConfirmTaxDeclare: async (taxPeriod) => {
+    const res = await apiBatchConfirmTax(taxPeriod);
+    if (res.code === 0) {
+      get().fetchPendingData();
+      return res.data;
+    }
+    throw new Error('批量申报失败');
   },
 }));
 

@@ -41,6 +41,12 @@ async def batch_create(data: BatchTransactionCreate, db: AsyncSession = Depends(
     return success(result)
 
 
+@router.post("/batch-confirm-tax")
+async def batch_confirm_tax(data: ConfirmTaxRequest, db: AsyncSession = Depends(get_db)):
+    result = await service.batch_confirm_tax(db, data.taxPeriod)
+    return success(result)
+
+
 @router.get("")
 async def list_transactions(
     page: int = Query(1, ge=1),

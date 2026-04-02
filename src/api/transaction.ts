@@ -54,3 +54,7 @@ export function getPendingTaxes() {
 export function batchCreateTransactions(items: Partial<Transaction>[]) {
   return request.post<ApiResponse<{ created: number; errors: { index: number; error: string }[] }>>('/transactions/batch', { items });
 }
+
+export function batchConfirmTax(taxPeriod: string) {
+  return request.post<ApiResponse<{ count: number; taxPeriod: string; declaredAt: string }>>('/transactions/batch-confirm-tax', { taxPeriod });
+}

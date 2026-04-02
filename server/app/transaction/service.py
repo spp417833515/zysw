@@ -467,6 +467,26 @@ async def get_pending_taxes(db: AsyncSession) -> List[dict]:
     return await _batch_enrich(db, list(result.scalars().all()))
 
 
+async def batch_confirm_tax(db: AsyncSession, tax_period: str) -> dict:
+    """一键申报：将所有未申报交易标记为已申报"""
+    now = datetime.now(timezone.utc).isoformat()
+    result = await db.execute(
+        select(Transaction).where(Transaction.tax_declared == False)
+    )
+    txns = list(result.scalars().all())
+    count = 0
+    for txn in txns:
+        txn.tax_declared = True
+        txn.tax_declared_at = now
+        txn.tax_period = tax_period
+        txn.updated_at = now
+        count += 1
+    if count > 0:
+        await db.commit()
+        await registry.emit("transaction.tax_batch_declared", {"count": count, "period": tax_period})
+    return {"count": count, "taxPeriod": tax_period, "declaredAt": now}
+
+
 async def batch_create_transactions(db: AsyncSession, items_data: list) -> dict:
     created = 0
     errors = []

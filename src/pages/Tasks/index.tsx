@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Tabs, Card, Row, Col, Statistic, Table, Button, Space, Tag, Typography } from 'antd';
+import { Tabs, Card, Row, Col, Statistic, Table, Button, Space, Tag, Typography, Modal, DatePicker, message } from 'antd';
 import {
   DollarOutlined,
   FileTextOutlined,
@@ -8,8 +8,10 @@ import {
   ScheduleOutlined,
   PayCircleOutlined,
   WarningOutlined,
+  ThunderboltOutlined,
 } from '@ant-design/icons';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import dayjs from 'dayjs';
 import PageContainer from '@/components/PageContainer';
 import {
   useTransactionStore,
@@ -70,6 +72,30 @@ const Tasks: React.FC = () => {
   // 工资差额
   const [diffItems, setDiffItems] = useState<SalaryDifferenceItem[]>([]);
   const [diffLoading, setDiffLoading] = useState(false);
+
+  // 一键申报
+  const [batchTaxModalOpen, setBatchTaxModalOpen] = useState(false);
+  const [batchTaxPeriod, setBatchTaxPeriod] = useState<dayjs.Dayjs | null>(dayjs().subtract(1, 'month').startOf('month'));
+  const [batchTaxLoading, setBatchTaxLoading] = useState(false);
+  const batchConfirmTaxDeclare = useTransactionStore((s) => s.batchConfirmTaxDeclare);
+
+  const handleBatchTaxDeclare = async () => {
+    if (!batchTaxPeriod) {
+      message.warning('请选择申报所属期');
+      return;
+    }
+    setBatchTaxLoading(true);
+    try {
+      const result = await batchConfirmTaxDeclare(batchTaxPeriod.format('YYYY-MM'));
+      message.success(`一键申报完成：${result.count} 笔交易已标记为已申报`);
+      setBatchTaxModalOpen(false);
+      fetchPendingData();
+    } catch {
+      message.error('申报失败，请重试');
+    } finally {
+      setBatchTaxLoading(false);
+    }
+  };
   const fetchDifferences = async () => {
     setDiffLoading(true);
     try {
@@ -416,13 +442,26 @@ const Tasks: React.FC = () => {
       key: 'tax',
       label: `待申报 (${pendingTaxes.length})`,
       children: (
-        <Table
-          rowKey="id"
-          columns={taxColumns}
-          dataSource={pendingTaxes}
-          pagination={{ pageSize: 10 }}
-          size="middle"
-        />
+        <>
+          {pendingTaxes.length > 0 && (
+            <div style={{ marginBottom: 16, textAlign: 'right' }}>
+              <Button
+                type="primary"
+                icon={<ThunderboltOutlined />}
+                onClick={() => setBatchTaxModalOpen(true)}
+              >
+                一键申报 ({pendingTaxes.length} 笔)
+              </Button>
+            </div>
+          )}
+          <Table
+            rowKey="id"
+            columns={taxColumns}
+            dataSource={pendingTaxes}
+            pagination={{ pageSize: 10 }}
+            size="middle"
+          />
+        </>
       ),
     },
   ];
@@ -477,6 +516,35 @@ const Tasks: React.FC = () => {
         onClose={() => { setSalaryModalOpen(false); setPayingItem(null); }}
         onSuccess={fetchUnpaid}
       />
+      <Modal
+        title="一键申报"
+        open={batchTaxModalOpen}
+        onOk={handleBatchTaxDeclare}
+        onCancel={() => setBatchTaxModalOpen(false)}
+        okText="确认全部申报"
+        cancelText="取消"
+        confirmLoading={batchTaxLoading}
+        destroyOnClose
+      >
+        <Space direction="vertical" size="middle" style={{ width: '100%', padding: '16px 0' }}>
+          <Typography.Text>
+            将 <Typography.Text strong style={{ color: '#f5222d', fontSize: 18 }}>{pendingTaxes.length}</Typography.Text> 笔待申报交易全部标记为已申报
+          </Typography.Text>
+          <div>
+            <Typography.Text style={{ display: 'block', marginBottom: 8 }}>申报所属期：</Typography.Text>
+            <DatePicker
+              picker="month"
+              value={batchTaxPeriod}
+              onChange={(val) => setBatchTaxPeriod(val)}
+              placeholder="选择申报所属期"
+              style={{ width: '100%' }}
+            />
+          </div>
+          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+            确认后所有待申报交易将标记为已完成，并记录申报时间
+          </Typography.Text>
+        </Space>
+      </Modal>
     </PageContainer>
   );
 };
