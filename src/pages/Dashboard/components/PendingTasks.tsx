@@ -11,6 +11,7 @@ import {
   UserOutlined,
   MoneyCollectOutlined,
   PayCircleOutlined,
+  WarningOutlined,
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -22,7 +23,7 @@ import {
 } from '@/store/useTransactionStore';
 import { useRecurringExpenseStore } from '@/store/useRecurringExpenseStore';
 import { useReimbursementStore } from '@/store/useReimbursementStore';
-import { getEmployeeReminders, getUnpaidSalaries } from '@/api/employee';
+import { getEmployeeReminders, getUnpaidSalaries, getSalaryDifferences } from '@/api/employee';
 import { computeReminders, computeRecurringReminders } from '@/utils/reminder';
 import { useThemeToken } from '@/hooks/useThemeToken';
 import { formatAmount } from '@/utils/format';
@@ -49,6 +50,8 @@ const PendingTasks: React.FC = () => {
   const [employeeReminderCount, setEmployeeReminderCount] = React.useState(0);
   const [unpaidSalaryCount, setUnpaidSalaryCount] = React.useState(0);
   const [unpaidSalaryAmount, setUnpaidSalaryAmount] = React.useState(0);
+  const [salaryDiffCount, setSalaryDiffCount] = React.useState(0);
+  const [salaryDiffAmount, setSalaryDiffAmount] = React.useState(0);
 
   useEffect(() => {
     fetchPendingReimbursementCount();
@@ -59,6 +62,11 @@ const PendingTasks: React.FC = () => {
     getUnpaidSalaries().then((res) => {
       setUnpaidSalaryCount(res.data?.count ?? 0);
       setUnpaidSalaryAmount(res.data?.totalAmount ?? 0);
+    }).catch(() => {});
+    getSalaryDifferences().then((res) => {
+      const items = res.data ?? [];
+      setSalaryDiffCount(items.length);
+      setSalaryDiffAmount(Math.round(items.reduce((s, i) => s + Math.abs(i.difference), 0) * 100) / 100);
     }).catch(() => {});
   }, []);
 
@@ -84,6 +92,13 @@ const PendingTasks: React.FC = () => {
       label: unpaidSalaryCount > 0 ? `待开工资 ¥${formatAmount(unpaidSalaryAmount)}` : '待开工资',
       count: unpaidSalaryCount,
       tab: 'salary-unpaid',
+    },
+    {
+      key: 'salary-diff',
+      icon: <WarningOutlined style={{ fontSize: 20, color: '#faad14' }} />,
+      label: salaryDiffCount > 0 ? `工资差额 ¥${formatAmount(salaryDiffAmount)}` : '工资差额',
+      count: salaryDiffCount,
+      tab: 'salary-diff',
     },
     {
       key: 'collection',

@@ -64,3 +64,27 @@ export function getPayables() {
 export function getAgingAnalysis(type: string = 'receivable') {
   return request.get<ApiResponse<AgingReport>>('/reports/aging', { params: { type } });
 }
+
+// ======== 报税报表 ========
+
+export interface TaxReportFile {
+  filename: string;
+  size: number;
+  createdAt: string;
+}
+
+export function generateTaxReport(params: { reportType: string; startDate: string; endDate: string }) {
+  return request.post<ApiResponse<{ filename: string; path: string }>>('/reports/tax-report/generate', null, { params });
+}
+
+export function listTaxReports() {
+  return request.get<ApiResponse<TaxReportFile[]>>('/reports/tax-report/list');
+}
+
+export function deleteTaxReport(filename: string) {
+  return request.delete<ApiResponse<null>>(`/reports/tax-report/${encodeURIComponent(filename)}`);
+}
+
+export function getTaxReportDownloadUrl(filename: string) {
+  return `/api/reports/tax-report/download?filename=${encodeURIComponent(filename)}`;
+}

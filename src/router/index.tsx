@@ -33,6 +33,7 @@ const router = createBrowserRouter([
       { path: 'report/category', element: lazyLoad(() => import('@/pages/Report/CategoryReport')) },
       { path: 'report/trend', element: lazyLoad(() => import('@/pages/Report/TrendReport')) },
       { path: 'report/receivable-payable', element: lazyLoad(() => import('@/pages/Report/ReceivablePayable')) },
+      { path: 'report/tax-report', element: lazyLoad(() => import('@/pages/Report/TaxReport')) },
       { path: 'tasks', element: lazyLoad(() => import('@/pages/Tasks')) },
       { path: 'invoice', element: lazyLoad(() => import('@/pages/Invoice')) },
       { path: 'invoice/create', element: lazyLoad(() => import('@/pages/Invoice/InvoiceCreate')) },

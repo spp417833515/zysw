@@ -1,6 +1,7 @@
 import json
 import uuid
 from datetime import datetime, timezone
+from decimal import Decimal
 from typing import Optional, List
 
 from sqlalchemy import select, func, and_
@@ -144,18 +145,19 @@ async def _update_balance(db: AsyncSession, txn_type: str, amount: float,
     if payment_account_type == "personal":
         return
     multiplier = -1 if reverse else 1
+    delta = Decimal(str(amount)) * multiplier
     account = await db.get(Account, account_id)
     if account:
         if txn_type == "income":
-            account.balance += amount * multiplier
+            account.balance += delta
         elif txn_type == "expense":
-            account.balance -= amount * multiplier
+            account.balance -= delta
         elif txn_type == "transfer":
-            account.balance -= amount * multiplier
+            account.balance -= delta
     if txn_type == "transfer" and to_account_id:
         to_account = await db.get(Account, to_account_id)
         if to_account:
-            to_account.balance += amount * multiplier
+            to_account.balance += delta
 
 
 async def get_transactions(

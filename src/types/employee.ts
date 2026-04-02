@@ -47,6 +47,8 @@ export interface SalaryRecord {
   baseSalary: number;
   tax: number;
   netSalary: number;
+  actualPaid?: number;
+  difference?: number;
   status: string;
   transactionId?: string;
   confirmedAt: string;
@@ -58,10 +60,27 @@ export interface UnpaidSalaryItem {
   year: number;
   month: number;
   baseSalary: number;
+  netSalary: number;
 }
 
 export interface UnpaidSalaries {
   count: number;
   totalAmount: number;
   items: UnpaidSalaryItem[];
+}
+
+export interface SalaryDifferenceItem {
+  id: string;
+  employeeId: string;
+  employeeName: string;
+  year: number;
+  month: number;
+  baseSalary: number;
+  tax: number;
+  netSalary: number;
+  actualPaid: number;
+  difference: number;
+  type: 'underpaid' | 'overpaid';
+  label: string;
+  confirmedAt: string;
 }

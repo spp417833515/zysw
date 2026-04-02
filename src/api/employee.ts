@@ -1,5 +1,5 @@
 import request from './request';
-import type { Employee, SalaryRecord, UnpaidSalaries, EmployeeReminder, TaxInfo } from '@/types/employee';
+import type { Employee, SalaryRecord, UnpaidSalaries, EmployeeReminder, TaxInfo, SalaryDifferenceItem } from '@/types/employee';
 import type { ApiResponse, PaginatedResponse } from '@/types/common';
 
 export function getEmployees(params?: Record<string, unknown>) {
@@ -42,6 +42,14 @@ export function getUnpaidSalaries() {
   return request.get<ApiResponse<UnpaidSalaries>>('/employees/unpaid-salaries');
 }
 
-export function confirmSalary(params: { employeeId: string; year: number; month: number; accountId?: string }) {
-  return request.post<ApiResponse<SalaryRecord>>('/employees/salary-records/confirm', null, { params });
+export function confirmSalary(data: { employeeId: string; year: number; month: number; accountId?: string; transferFee?: number; manualTax?: number; actualPaid?: number; voucher?: { id: string; name: string; url: string; type: string; size: number }[] }) {
+  return request.post<ApiResponse<SalaryRecord>>('/employees/salary-records/confirm', data);
+}
+
+export function updateSalaryRecord(id: string, data: { tax?: number; actualPaid?: number }) {
+  return request.put<ApiResponse<SalaryRecord>>(`/employees/salary-records/${id}`, data);
+}
+
+export function getSalaryDifferences() {
+  return request.get<ApiResponse<SalaryDifferenceItem[]>>('/employees/salary-differences');
 }

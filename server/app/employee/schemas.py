@@ -1,5 +1,24 @@
-from typing import Optional
+from typing import Optional, List
 from pydantic import BaseModel
+
+
+class VoucherItem(BaseModel):
+    id: str = ""
+    name: str = ""
+    url: str = ""
+    type: str = ""
+    size: int = 0
+
+
+class SalaryConfirmRequest(BaseModel):
+    employeeId: str
+    year: int
+    month: int
+    accountId: Optional[str] = None
+    transferFee: float = 0
+    manualTax: Optional[float] = None      # 手动填写个税（不传则系统自动算）
+    actualPaid: Optional[float] = None     # 实际发放金额（不传则等于税后应发）
+    voucher: List[VoucherItem] = []
 
 
 class EmployeeCreate(BaseModel):
@@ -16,6 +35,11 @@ class EmployeeCreate(BaseModel):
     housingFundRate: float = 0
     specialDeduction: float = 0
     notes: str = ""
+
+
+class SalaryRecordUpdate(BaseModel):
+    tax: Optional[float] = None
+    actualPaid: Optional[float] = None
 
 
 class EmployeeUpdate(BaseModel):

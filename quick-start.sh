@@ -7,10 +7,11 @@ cd "$SCRIPT_DIR"
 echo "🚀 正在启动小微企业财务记账系统..."
 echo ""
 
-# 启动后端
+# 启动后端（使用系统Python 3.9）
+PYTHON="/usr/bin/python3"
 echo "📦 启动后端服务..."
 cd server
-nohup /Users/admin/Library/Python/3.9/bin/uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload > ../backend.log 2>&1 &
+nohup $PYTHON -m uvicorn app.main:app --host 0.0.0.0 --port 39721 --reload > ../backend.log 2>&1 &
 echo $! > ../.backend.pid
 cd ..
 
@@ -27,9 +28,9 @@ echo ""
 echo "✅ 启动完成！"
 echo ""
 echo "📍 访问地址："
-echo "   前端界面: http://localhost:5173"
-echo "   后端API:  http://localhost:8000"
-echo "   API文档:  http://localhost:8000/docs"
+echo "   前端界面: http://localhost:42617"
+echo "   后端API:  http://localhost:39721"
+echo "   API文档:  http://localhost:39721/docs"
 echo ""
 echo "💡 提示："
 echo "   - 使用 ./stop.sh 停止服务"

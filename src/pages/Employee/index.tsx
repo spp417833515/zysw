@@ -5,6 +5,7 @@ import PageContainer from '@/components/PageContainer';
 import EmployeeForm from './components/EmployeeForm';
 import TaxCalcModal from './components/TaxCalcModal';
 import ContractModal from './components/ContractModal';
+import SalaryEditModal from './components/SalaryEditModal';
 import SalaryConfirmModal from '@/pages/Tasks/components/SalaryConfirmModal';
 import {
   getEmployees, createEmployee, updateEmployee, deleteEmployee,
@@ -43,6 +44,8 @@ const EmployeePage: React.FC = () => {
   const { unpaidItems, unpaidLoading, fetchUnpaid } = useUnpaidSalaries();
   const [salaryModalOpen, setSalaryModalOpen] = useState(false);
   const [payingItem, setPayingItem] = useState<UnpaidSalaryItem | null>(null);
+  const [editingRecord, setEditingRecord] = useState<SalaryRecord | null>(null);
+  const [salaryEditOpen, setSalaryEditOpen] = useState(false);
 
   const fetchData = async (p = page) => {
     setLoading(true);
@@ -122,20 +125,6 @@ const EmployeePage: React.FC = () => {
     },
     { title: '发薪日', dataIndex: 'payDay', key: 'payDay', width: 80, render: (v: number) => `每月${v}号` },
     {
-      title: '个税', key: 'tax', width: 90,
-      render: (_: unknown, r: Employee) => (
-        <Text type={r.taxInfo.tax > 0 ? 'danger' : 'success'}>
-          ¥{r.taxInfo.tax.toLocaleString()}
-        </Text>
-      ),
-    },
-    {
-      title: '实发工资', key: 'netSalary', width: 110,
-      render: (_: unknown, r: Employee) => (
-        <Text type="success" strong>¥{r.taxInfo.netSalary.toLocaleString()}</Text>
-      ),
-    },
-    {
       title: '操作', key: 'action', width: 240,
       render: (_: unknown, record: Employee) => (
         <Space>
@@ -169,8 +158,31 @@ const EmployeePage: React.FC = () => {
     { title: '月份', dataIndex: 'month', key: 'month', width: 80, render: (v: number) => `${v}月` },
     { title: '应发工资', dataIndex: 'baseSalary', key: 'baseSalary', width: 120, render: (v: number) => `¥${formatAmount(v)}` },
     { title: '个税', dataIndex: 'tax', key: 'tax', width: 100, render: (v: number) => `¥${formatAmount(v)}` },
-    { title: '实发工资', dataIndex: 'netSalary', key: 'netSalary', width: 120, render: (v: number) => <Text type="success" strong>¥{formatAmount(v)}</Text> },
+    { title: '应发(税后)', dataIndex: 'netSalary', key: 'netSalary', width: 120, render: (v: number) => `¥${formatAmount(v)}` },
+    {
+      title: '实付金额', dataIndex: 'actualPaid', key: 'actualPaid', width: 120,
+      render: (v: number | undefined, r: SalaryRecord) => {
+        if (v == null) return <Text>-</Text>;
+        const diff = r.difference ?? 0;
+        return diff !== 0
+          ? <Text type="warning">¥{formatAmount(v)}</Text>
+          : <Text>¥{formatAmount(v)}</Text>;
+      },
+    },
+    {
+      title: '差额', dataIndex: 'difference', key: 'difference', width: 100,
+      render: (v: number | undefined) => {
+        if (v == null || v === 0) return <Text type="success">-</Text>;
+        return <Text type="danger">¥{formatAmount(v)}</Text>;
+      },
+    },
     { title: '发放时间', dataIndex: 'confirmedAt', key: 'confirmedAt', width: 180, render: (v: string) => v ? new Date(v).toLocaleString() : '-' },
+    {
+      title: '操作', key: 'action', width: 80,
+      render: (_: unknown, record: SalaryRecord) => (
+        <a onClick={() => { setEditingRecord(record); setSalaryEditOpen(true); }}>修改</a>
+      ),
+    },
   ];
 
   const tabItems = [
@@ -285,6 +297,13 @@ const EmployeePage: React.FC = () => {
         open={salaryModalOpen}
         item={payingItem}
         onClose={() => { setSalaryModalOpen(false); setPayingItem(null); }}
+        onSuccess={handleSalarySuccess}
+      />
+
+      <SalaryEditModal
+        open={salaryEditOpen}
+        record={editingRecord}
+        onClose={() => { setSalaryEditOpen(false); setEditingRecord(null); }}
         onSuccess={handleSalarySuccess}
       />
     </PageContainer>

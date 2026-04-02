@@ -50,21 +50,24 @@ start_backend() {
     echo -e "${GREEN}正在启动后端服务...${NC}"
     cd "$SCRIPT_DIR/server"
 
+    # 使用系统Python 3.9（uvicorn及依赖安装在此版本下）
+    PYTHON="/usr/bin/python3"
+
     # 检查依赖
-    if ! python3 -c "import uvicorn" 2>/dev/null; then
+    if ! $PYTHON -c "import uvicorn" 2>/dev/null; then
         echo -e "${YELLOW}正在安装后端依赖...${NC}"
-        python3 -m pip install -r requirements.txt --user
+        $PYTHON -m pip install -r requirements.txt --user
     fi
 
     # 启动后端
-    nohup /Users/admin/Library/Python/3.9/bin/uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload > "$SCRIPT_DIR/backend.log" 2>&1 &
+    nohup $PYTHON -m uvicorn app.main:app --host 0.0.0.0 --port 39721 --reload > "$SCRIPT_DIR/backend.log" 2>&1 &
     echo $! > "$BACKEND_PID_FILE"
 
     sleep 2
     if kill -0 $(cat "$BACKEND_PID_FILE") 2>/dev/null; then
         echo -e "${GREEN}✓ 后端服务启动成功${NC}"
-        echo -e "  地址: ${BLUE}http://localhost:8000${NC}"
-        echo -e "  文档: ${BLUE}http://localhost:8000/docs${NC}"
+        echo -e "  地址: ${BLUE}http://localhost:39721${NC}"
+        echo -e "  文档: ${BLUE}http://localhost:39721/docs${NC}"
     else
         echo -e "${RED}✗ 后端服务启动失败，请查看日志${NC}"
         rm -f "$BACKEND_PID_FILE"
@@ -95,7 +98,7 @@ start_frontend() {
     sleep 3
     if kill -0 $(cat "$FRONTEND_PID_FILE") 2>/dev/null; then
         echo -e "${GREEN}✓ 前端服务启动成功${NC}"
-        echo -e "  地址: ${BLUE}http://localhost:5173${NC}"
+        echo -e "  地址: ${BLUE}http://localhost:42617${NC}"
     else
         echo -e "${RED}✗ 前端服务启动失败，请查看日志${NC}"
         rm -f "$FRONTEND_PID_FILE"
@@ -147,7 +150,7 @@ show_status() {
     # 后端状态
     if [ -f "$BACKEND_PID_FILE" ] && kill -0 $(cat "$BACKEND_PID_FILE") 2>/dev/null; then
         echo -e "后端服务: ${GREEN}运行中${NC} (PID: $(cat "$BACKEND_PID_FILE"))"
-        echo -e "  地址: http://localhost:8000"
+        echo -e "  地址: http://localhost:39721"
     else
         echo -e "后端服务: ${RED}未运行${NC}"
     fi
@@ -155,7 +158,7 @@ show_status() {
     # 前端状态
     if [ -f "$FRONTEND_PID_FILE" ] && kill -0 $(cat "$FRONTEND_PID_FILE") 2>/dev/null; then
         echo -e "前端服务: ${GREEN}运行中${NC} (PID: $(cat "$FRONTEND_PID_FILE"))"
-        echo -e "  地址: http://localhost:5173"
+        echo -e "  地址: http://localhost:42617"
     else
         echo -e "前端服务: ${RED}未运行${NC}"
     fi

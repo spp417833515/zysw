@@ -1,53 +1,51 @@
 import React, { useMemo } from 'react';
-import { Card, Alert, Typography, Space, Tag } from 'antd';
-import { ClockCircleOutlined, WarningOutlined } from '@ant-design/icons';
+import { Card, Alert, Typography, Space, Tag, Divider } from 'antd';
+import { ClockCircleOutlined, WarningOutlined, CalendarOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
-import { calculateTaxDeadline, getCurrentTaxReminders } from '@/utils/taxConfig';
+import {
+  calculateTaxDeadline,
+  getCurrentDeclarationItems,
+  isQuarterlyMonth,
+} from '@/utils/taxConfig';
 
 const { Text } = Typography;
 
 const TaxDeadlineReminder: React.FC = () => {
   const today = dayjs();
 
-  const { deadline, daysLeft, status, nextPeriodStart, reminders } = useMemo(() => {
+  const { deadline, daysLeft, status, items, isQuarterly } = useMemo(() => {
     const year = today.year();
     const month = today.month(); // 0-11
 
-    // 计算本月征期截止日期（考虑节假日顺延）
     const currentDeadline = calculateTaxDeadline(year, month);
     const days = currentDeadline.diff(today, 'day');
-
-    // 下个月征期开始日期
-    const nextMonth = today.add(1, 'month');
-    const nextStart = dayjs(new Date(nextMonth.year(), nextMonth.month(), 1));
-
-    // 获取当前应申报事项
-    const currentReminders = getCurrentTaxReminders(today);
+    const declarationItems = getCurrentDeclarationItems(today);
+    const quarterly = isQuarterlyMonth(today);
 
     let alertStatus: 'error' | 'warning' | 'info' | 'success' = 'info';
-
     if (days < 0) {
-      // 已过期，显示下个月征期
       alertStatus = 'success';
     } else if (days <= 3) {
       alertStatus = 'error';
     } else if (days <= 7) {
       alertStatus = 'warning';
-    } else {
-      alertStatus = 'info';
     }
 
     return {
       deadline: currentDeadline,
       daysLeft: days,
       status: alertStatus,
-      nextPeriodStart: nextStart,
-      reminders: currentReminders,
+      items: declarationItems,
+      isQuarterly: quarterly,
     };
   }, [today]);
 
-  // 如果已过本月征期，显示下月征期信息
+  // 已过本月征期
   if (daysLeft < 0) {
+    const nextMonth = today.add(1, 'month');
+    const nextDeadline = calculateTaxDeadline(nextMonth.year(), nextMonth.month());
+    const nextIsQ = isQuarterlyMonth(nextMonth);
+
     return (
       <Card>
         <Alert
@@ -57,15 +55,27 @@ const TaxDeadlineReminder: React.FC = () => {
             <Space direction="vertical" size={4} style={{ width: '100%' }}>
               <Text strong>本月征期已结束</Text>
               <Text type="secondary" style={{ fontSize: 13 }}>
-                下月征期：{nextPeriodStart.format('YYYY年MM月DD日')} 开始
+                下月征期：{nextMonth.format('M月')}1日 ～ {nextDeadline.format('M月D日')}
+                {nextIsQ && <Tag color="blue" style={{ marginLeft: 8 }}>含季度申报</Tag>}
               </Text>
             </Space>
           }
           showIcon
         />
+        {nextIsQ && (
+          <div style={{ marginTop: 8, paddingLeft: 38, fontSize: 12 }}>
+            <Text type="secondary">
+              下月需完成季度申报：增值税、企业所得税预缴等
+            </Text>
+          </div>
+        )}
       </Card>
     );
   }
+
+  // 按频率分组
+  const monthlyItems = items.filter((i) => i.frequency === 'monthly');
+  const quarterlyItems = items.filter((i) => i.frequency === 'quarterly');
 
   return (
     <Card>
@@ -76,39 +86,60 @@ const TaxDeadlineReminder: React.FC = () => {
           <Space direction="vertical" size={4} style={{ width: '100%' }}>
             <Space align="center">
               <Text strong style={{ fontSize: 15 }}>
-                距本月征期结束还有 {daysLeft} 天
+                距征期结束还有 {daysLeft} 天
               </Text>
               {daysLeft <= 3 && <Tag color="red">紧急</Tag>}
               {daysLeft > 3 && daysLeft <= 7 && <Tag color="orange">即将到期</Tag>}
+              {isQuarterly && <Tag color="blue">季度申报月</Tag>}
             </Space>
             <Text type="secondary" style={{ fontSize: 13 }}>
-              截止日期：{deadline.format('YYYY年MM月DD日（dddd）')}
+              <CalendarOutlined style={{ marginRight: 4 }} />
+              征期：{today.format('M月')}1日 ～ {deadline.format('M月D日（dddd）')}
             </Text>
-            {daysLeft <= 7 && (
-              <Text type="warning" style={{ fontSize: 12 }}>
-                ⚠️ 请及时完成税务申报，避免逾期罚款
-              </Text>
-            )}
           </Space>
         }
         showIcon
         style={{ marginBottom: 0 }}
       />
 
-      {/* 提醒事项 */}
-      <div style={{ marginTop: 12, paddingLeft: 38 }}>
-        <Text type="secondary" style={{ fontSize: 12 }}>
-          <strong>本期申报事项：</strong>
-        </Text>
-        <ul style={{ margin: '8px 0 0 0', paddingLeft: 20, fontSize: 12 }}>
-          <Typography.Text type="secondary">
-          {reminders.map((item, index) => (
-            <li key={index}>{item}</li>
-          ))}
-          </Typography.Text>
-        </ul>
-        <Text type="secondary" style={{ fontSize: 11, fontStyle: 'italic', display: 'block', marginTop: 8 }}>
-          💡 提示：征期遇节假日会自动顺延至下一工作日
+      <div style={{ marginTop: 16, paddingLeft: 4 }}>
+        {/* 月报事项 */}
+        <div style={{ marginBottom: monthlyItems.length > 0 && quarterlyItems.length > 0 ? 12 : 0 }}>
+          <Space align="center" style={{ marginBottom: 8 }}>
+            <Tag color="green">月报</Tag>
+            <Text type="secondary" style={{ fontSize: 12 }}>
+              申报所属期：{monthlyItems[0]?.periodLabel}
+            </Text>
+          </Space>
+          <ul style={{ margin: 0, paddingLeft: 20, fontSize: 13 }}>
+            {monthlyItems.map((item, i) => (
+              <li key={i} style={{ color: '#666', lineHeight: '24px' }}>{item.name}</li>
+            ))}
+          </ul>
+        </div>
+
+        {/* 季报事项 */}
+        {quarterlyItems.length > 0 && (
+          <>
+            <Divider style={{ margin: '8px 0' }} />
+            <div>
+              <Space align="center" style={{ marginBottom: 8 }}>
+                <Tag color="blue">季报</Tag>
+                <Text type="secondary" style={{ fontSize: 12 }}>
+                  申报所属期：{quarterlyItems[0]?.periodLabel}
+                </Text>
+              </Space>
+              <ul style={{ margin: 0, paddingLeft: 20, fontSize: 13 }}>
+                {quarterlyItems.map((item, i) => (
+                  <li key={i} style={{ color: '#666', lineHeight: '24px' }}>{item.name}</li>
+                ))}
+              </ul>
+            </div>
+          </>
+        )}
+
+        <Text type="secondary" style={{ fontSize: 11, fontStyle: 'italic', display: 'block', marginTop: 12 }}>
+          征期遇法定节假日、周末自动顺延至下一工作日
         </Text>
       </div>
     </Card>

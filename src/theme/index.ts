@@ -15,7 +15,7 @@ export const lightTheme: ThemeConfig = {
     Layout: {
       siderBg: '#001529',
       headerBg: '#fff',
-      bodyBg: '#f5f5f5',
+      bodyBg: '#ffffff',
     },
     Menu: {
       darkItemBg: '#001529',

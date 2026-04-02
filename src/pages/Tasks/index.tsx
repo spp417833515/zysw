@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Tabs, Card, Row, Col, Statistic, Table, Button, Space, Tag } from 'antd';
+import { Tabs, Card, Row, Col, Statistic, Table, Button, Space, Tag, Typography } from 'antd';
 import {
   DollarOutlined,
   FileTextOutlined,
@@ -7,6 +7,7 @@ import {
   ClockCircleOutlined,
   ScheduleOutlined,
   PayCircleOutlined,
+  WarningOutlined,
 } from '@ant-design/icons';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import PageContainer from '@/components/PageContainer';
@@ -32,7 +33,11 @@ import TransactionDetailModal from '@/pages/Transaction/components/TransactionDe
 import { useUnpaidSalaries } from '@/hooks/useUnpaidSalaries';
 import { baseUnpaidSalaryColumns, makeUnpaidActionColumn } from '@/pages/shared/unpaidSalaryColumns';
 import type { Transaction } from '@/types/transaction';
-import type { UnpaidSalaryItem } from '@/types/employee';
+import type { UnpaidSalaryItem, SalaryDifferenceItem } from '@/types/employee';
+import { getSalaryDifferences } from '@/api/employee';
+import { formatAmount } from '@/utils/format';
+
+const { Text } = Typography;
 
 const Tasks: React.FC = () => {
   const navigate = useNavigate();
@@ -62,10 +67,24 @@ const Tasks: React.FC = () => {
   const [salaryModalOpen, setSalaryModalOpen] = useState(false);
   const [payingItem, setPayingItem] = useState<UnpaidSalaryItem | null>(null);
 
+  // 工资差额
+  const [diffItems, setDiffItems] = useState<SalaryDifferenceItem[]>([]);
+  const [diffLoading, setDiffLoading] = useState(false);
+  const fetchDifferences = async () => {
+    setDiffLoading(true);
+    try {
+      const res = await getSalaryDifferences();
+      setDiffItems(res.data ?? []);
+    } finally {
+      setDiffLoading(false);
+    }
+  };
+
   useEffect(() => {
     fetchPendingData();
     fetchRecurring();
     fetchUnpaid();
+    fetchDifferences();
   }, [fetchPendingData, fetchRecurring]);
 
   const baseColumns = [
@@ -264,6 +283,37 @@ const Tasks: React.FC = () => {
     makeUnpaidActionColumn((record) => { setPayingItem(record); setSalaryModalOpen(true); }),
   ];
 
+  const differenceColumns = [
+    { title: '员工', dataIndex: 'employeeName', key: 'employeeName', width: 100 },
+    { title: '月份', key: 'period', width: 120, render: (_: unknown, r: SalaryDifferenceItem) => `${r.year}年${r.month}月` },
+    { title: '应发(税后)', dataIndex: 'netSalary', key: 'netSalary', width: 120, render: (v: number) => `¥${formatAmount(v)}` },
+    { title: '实付金额', dataIndex: 'actualPaid', key: 'actualPaid', width: 120, render: (v: number) => `¥${formatAmount(v)}` },
+    {
+      title: '差额', dataIndex: 'difference', key: 'difference', width: 120,
+      render: (v: number) => (
+        <Text strong style={{ color: v > 0 ? '#f5222d' : '#faad14' }}>
+          ¥{formatAmount(Math.abs(v))}
+        </Text>
+      ),
+    },
+    {
+      title: '状态', dataIndex: 'type', key: 'type', width: 140,
+      render: (_: unknown, r: SalaryDifferenceItem) => (
+        <Tag color={r.type === 'underpaid' ? 'red' : 'orange'}>
+          {r.type === 'underpaid' ? `欠员工 ¥${formatAmount(r.difference)}` : `员工欠 ¥${formatAmount(Math.abs(r.difference))}`}
+        </Tag>
+      ),
+    },
+    {
+      title: '待办', key: 'action', width: 180,
+      render: (_: unknown, r: SalaryDifferenceItem) => (
+        <Text type="secondary" style={{ fontSize: 12 }}>
+          {r.type === 'underpaid' ? `需补发 ¥${formatAmount(r.difference)} 给${r.employeeName}` : `${r.employeeName}需偿还 ¥${formatAmount(Math.abs(r.difference))}`}
+        </Text>
+      ),
+    },
+  ];
+
   const tabItems = [
     // 资金流动
     {
@@ -301,6 +351,20 @@ const Tasks: React.FC = () => {
           columns={unpaidSalaryColumns}
           dataSource={unpaidItems}
           loading={unpaidLoading}
+          pagination={{ pageSize: 10 }}
+          size="middle"
+        />
+      ),
+    },
+    {
+      key: 'salary-diff',
+      label: `工资差额 (${diffItems.length})`,
+      children: (
+        <Table
+          rowKey="id"
+          columns={differenceColumns}
+          dataSource={diffItems}
+          loading={diffLoading}
           pagination={{ pageSize: 10 }}
           size="middle"
         />
@@ -370,6 +434,7 @@ const Tasks: React.FC = () => {
           { title: '待到账', value: pendingIncomePayments.length, suffix: '笔', icon: <DollarOutlined />, color: colors.warning },
           { title: '待支出', value: pendingExpensePayments.length, suffix: '笔', icon: <DollarOutlined />, color: colors.expense },
           { title: '待开工资', value: unpaidItems.length, suffix: '笔', icon: <PayCircleOutlined />, color: colors.expense },
+          { title: '工资差额', value: diffItems.length, suffix: '笔', icon: <WarningOutlined />, color: '#faad14' },
           { title: '待开票', value: pendingInvoices.length, suffix: '笔', icon: <FileTextOutlined />, color: colors.info },
           { title: '固定开销', value: recurringReminders.length, suffix: '项', icon: <ScheduleOutlined />, color: colors.primary },
           { title: '超时提醒', value: reminders.length, suffix: '项', icon: <ClockCircleOutlined />, color: colors.expense },

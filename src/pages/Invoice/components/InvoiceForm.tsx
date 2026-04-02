@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import {
   Form,
   Input,
@@ -20,6 +20,12 @@ import { formatAmount } from '@/utils/format';
 import ImageUpload from '@/components/ImageUpload';
 
 const { Text } = Typography;
+
+// 公司信息
+const COMPANY_INFO = {
+  name: '知域科技（新安县）有限责任公司',
+  taxNumber: '91410323MAK75U412Y',
+};
 
 export interface InvoiceFormValues {
   code: string;
@@ -73,6 +79,29 @@ const directionOptions = Object.entries(invoiceDirectionLabels).map(
 const InvoiceForm: React.FC<InvoiceFormProps> = ({ onSubmit, onCancel }) => {
   const [form] = Form.useForm<InvoiceFormValues>();
   const items: InvoiceFormItem[] = Form.useWatch('items', form) || [];
+  const direction = Form.useWatch('direction', form);
+
+  // 根据方向自动填充公司信息，并清除对面
+  useEffect(() => {
+    if (!direction) return;
+    if (direction === 'in') {
+      // 收到发票：我方是购买方，清除销售方（由用户手填）
+      form.setFieldsValue({
+        buyerName: COMPANY_INFO.name,
+        buyerTaxNumber: COMPANY_INFO.taxNumber,
+        sellerName: '',
+        sellerTaxNumber: '',
+      });
+    } else if (direction === 'out') {
+      // 开出发票：我方是销售方，清除购买方（由用户手填）
+      form.setFieldsValue({
+        sellerName: COMPANY_INFO.name,
+        sellerTaxNumber: COMPANY_INFO.taxNumber,
+        buyerName: '',
+        buyerTaxNumber: '',
+      });
+    }
+  }, [direction, form]);
 
   const calculateItemAmount = (quantity?: number, unitPrice?: number): number => {
     if (quantity == null || unitPrice == null) return 0;
@@ -122,7 +151,7 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({ onSubmit, onCancel }) => {
       layout="vertical"
       onFinish={handleFinish}
       initialValues={{
-        direction: 'received',
+        direction: 'in',
         items: [{}],
       }}
     >
@@ -184,7 +213,11 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({ onSubmit, onCancel }) => {
         </Row>
       </Card>
 
-      <Card title="购买方信息" size="small" style={{ marginBottom: 16 }}>
+      <Card
+        title={`购买方信息${direction === 'in' ? '（我方）' : ''}`}
+        size="small"
+        style={{ marginBottom: 16 }}
+      >
         <Row gutter={16}>
           <Col span={12}>
             <Form.Item
@@ -192,7 +225,10 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({ onSubmit, onCancel }) => {
               name="buyerName"
               rules={[{ required: true, message: '请输入购买方名称' }]}
             >
-              <Input placeholder="请输入购买方名称" />
+              <Input
+                placeholder="请输入购买方名称"
+                disabled={direction === 'in'}
+              />
             </Form.Item>
           </Col>
           <Col span={12}>
@@ -201,13 +237,20 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({ onSubmit, onCancel }) => {
               name="buyerTaxNumber"
               rules={[{ required: true, message: '请输入购买方纳税人识别号' }]}
             >
-              <Input placeholder="请输入纳税人识别号" />
+              <Input
+                placeholder="请输入纳税人识别号"
+                disabled={direction === 'in'}
+              />
             </Form.Item>
           </Col>
         </Row>
       </Card>
 
-      <Card title="销售方信息" size="small" style={{ marginBottom: 16 }}>
+      <Card
+        title={`销售方信息${direction === 'out' ? '（我方）' : ''}`}
+        size="small"
+        style={{ marginBottom: 16 }}
+      >
         <Row gutter={16}>
           <Col span={12}>
             <Form.Item
@@ -215,7 +258,10 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({ onSubmit, onCancel }) => {
               name="sellerName"
               rules={[{ required: true, message: '请输入销售方名称' }]}
             >
-              <Input placeholder="请输入销售方名称" />
+              <Input
+                placeholder="请输入销售方名称"
+                disabled={direction === 'out'}
+              />
             </Form.Item>
           </Col>
           <Col span={12}>
@@ -224,7 +270,10 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({ onSubmit, onCancel }) => {
               name="sellerTaxNumber"
               rules={[{ required: true, message: '请输入销售方纳税人识别号' }]}
             >
-              <Input placeholder="请输入纳税人识别号" />
+              <Input
+                placeholder="请输入纳税人识别号"
+                disabled={direction === 'out'}
+              />
             </Form.Item>
           </Col>
         </Row>

@@ -123,12 +123,13 @@ export const useTransactionStore = create<TransactionState>((set, get) => ({
 
   updateTransaction: async (id, updates) => {
     const res = await apiUpdateTransaction(id, updates);
-    if (res.code === 0) {
-      set((s) => ({
-        transactions: s.transactions.map((t) => (t.id === id ? res.data : t)),
-      }));
-      useAccountStore.getState().fetchAccounts();
+    if (res.code !== 0) {
+      throw new Error(res.message || '更新失败');
     }
+    set((s) => ({
+      transactions: s.transactions.map((t) => (t.id === id ? res.data : t)),
+    }));
+    useAccountStore.getState().fetchAccounts();
   },
 
   deleteTransaction: async (id) => {

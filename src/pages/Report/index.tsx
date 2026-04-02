@@ -6,6 +6,7 @@ import {
   PieChartOutlined,
   RiseOutlined,
   AccountBookOutlined,
+  FileExcelOutlined,
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import PageContainer from '@/components/PageContainer';
@@ -50,6 +51,12 @@ const reportCards: ReportCardItem[] = [
     path: '/report/receivable-payable',
     icon: <AccountBookOutlined style={{ fontSize: 36, color: brandColor }} />,
     description: '应收应付汇总与账龄分析',
+  },
+  {
+    title: '报税报表',
+    path: '/report/tax-report',
+    icon: <FileExcelOutlined style={{ fontSize: 36, color: '#217346' }} />,
+    description: '生成资产负债表、利润表、现金流量表 XLS 文件',
   },
 ];
 
