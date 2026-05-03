@@ -390,24 +390,42 @@ async def _apply_payment_confirmed(db: AsyncSession, txn: Transaction,
                                    account_id: Optional[str] = None) -> None:
     """将单笔交易标记为已付款。
 
-    若 txn.account_id 为空且传入 account_id，则绑定账户并即时扣账户余额。
-    （用于工资差额流水：创建时无账户，合并付款时再落地。）
+    余额一致性维护（关键）：
+    - 若 txn.account_id 为空且传入 account_id：绑定账户并扣余额（差额流水落地）
+    - 若 payment_account_type 从 personal → 非 personal 转换：原本未扣余额，现在补扣
+    - 若 payment_account_type 从 非 personal → personal 转换：原本扣过，现在退还
+
     调用方负责 commit。
     """
     now = datetime.now(timezone.utc).isoformat()
+    old_pat = txn.payment_account_type  # 必须在覆盖前读取
+
+    # 情形 A：txn 有账户、且 personal/非personal 状态切换 → 修正余额
+    if txn.account_id:
+        was_personal = old_pat == "personal"
+        will_personal = account_type == "personal"
+        if was_personal and not will_personal:
+            # 原本不扣，现在该扣 → 补扣
+            await _update_balance(db, txn.type, float(txn.amount),
+                                  txn.account_id, txn.to_account_id)
+        elif not was_personal and will_personal:
+            # 原本已扣，现在视为 personal → 退还
+            await _update_balance(db, txn.type, float(txn.amount),
+                                  txn.account_id, txn.to_account_id, reverse=True)
+
     txn.payment_confirmed = True
     txn.payment_account_type = account_type
     txn.payment_confirmed_at = now
     txn.updated_at = now
 
+    # 情形 B：原本无账户（如工资差额流水），现在绑定 → 扣余额
     if not txn.account_id and account_id and account_type != "personal":
-        # 校验账户存在，避免静默错绑（balance 静默不变）
         account = await db.get(Account, account_id)
         if not account:
             raise ValueError(f"账户不存在: {account_id}")
         txn.account_id = account_id
-        # 此时才把这笔金额作用到账户余额（创建时未作用）
-        await _update_balance(db, txn.type, float(txn.amount), account_id, txn.to_account_id)
+        await _update_balance(db, txn.type, float(txn.amount),
+                              account_id, txn.to_account_id)
 
 
 async def confirm_payment(db: AsyncSession, txn_id: str, account_type: str,
