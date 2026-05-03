@@ -385,18 +385,76 @@ async def delete_transaction(db: AsyncSession, txn_id: str) -> bool:
 
 # Workflow operations
 
-async def confirm_payment(db: AsyncSession, txn_id: str, account_type: str) -> Optional[dict]:
+async def _apply_payment_confirmed(db: AsyncSession, txn: Transaction,
+                                   account_type: str,
+                                   account_id: Optional[str] = None) -> None:
+    """将单笔交易标记为已付款。
+
+    若 txn.account_id 为空且传入 account_id，则绑定账户并即时扣账户余额。
+    （用于工资差额流水：创建时无账户，合并付款时再落地。）
+    调用方负责 commit。
+    """
+    now = datetime.now(timezone.utc).isoformat()
+    txn.payment_confirmed = True
+    txn.payment_account_type = account_type
+    txn.payment_confirmed_at = now
+    txn.updated_at = now
+
+    if not txn.account_id and account_id and account_type != "personal":
+        # 校验账户存在，避免静默错绑（balance 静默不变）
+        account = await db.get(Account, account_id)
+        if not account:
+            raise ValueError(f"账户不存在: {account_id}")
+        txn.account_id = account_id
+        # 此时才把这笔金额作用到账户余额（创建时未作用）
+        await _update_balance(db, txn.type, float(txn.amount), account_id, txn.to_account_id)
+
+
+async def confirm_payment(db: AsyncSession, txn_id: str, account_type: str,
+                          account_id: Optional[str] = None) -> Optional[dict]:
     txn = await db.get(Transaction, txn_id)
     if not txn:
         return None
-    txn.payment_confirmed = True
-    txn.payment_account_type = account_type
-    txn.payment_confirmed_at = datetime.now(timezone.utc).isoformat()
-    txn.updated_at = datetime.now(timezone.utc).isoformat()
+    await _apply_payment_confirmed(db, txn, account_type, account_id)
     await db.commit()
     await db.refresh(txn)
     await registry.emit("transaction.payment_confirmed", {"id": txn_id})
     return await _enrich(db, txn)
+
+
+async def batch_confirm_payment(db: AsyncSession, ids: List[str], account_type: str,
+                                account_id: Optional[str] = None) -> dict:
+    """合并付款：对一组交易统一标记已付款。
+
+    best-effort：跳过不存在/已确认的，commit 一次提交所有成功项。
+    若提供 account_id，则对所有 account_id 为空的交易绑定该账户并扣余额。
+    """
+    # 提前校验 accountId（如有），避免循环中部分成功
+    if account_id and account_type != "personal":
+        if not await db.get(Account, account_id):
+            raise ValueError(f"账户不存在: {account_id}")
+
+    success_ids: List[str] = []
+    skipped: List[dict] = []
+    for tid in ids:
+        txn = await db.get(Transaction, tid)
+        if not txn:
+            skipped.append({"id": tid, "reason": "not_found"})
+            continue
+        if txn.payment_confirmed:
+            skipped.append({"id": tid, "reason": "already_confirmed"})
+            continue
+        await _apply_payment_confirmed(db, txn, account_type, account_id)
+        success_ids.append(tid)
+    if success_ids:
+        await db.commit()
+        for tid in success_ids:
+            await registry.emit("transaction.payment_confirmed", {"id": tid})
+    return {
+        "success": len(success_ids),
+        "successIds": success_ids,
+        "skipped": skipped,
+    }
 
 
 async def confirm_invoice(db: AsyncSession, txn_id: str, invoice_id: Optional[str] = None) -> Optional[dict]:

@@ -53,3 +53,9 @@ export function updateSalaryRecord(id: string, data: { tax?: number; actualPaid?
 export function getSalaryDifferences() {
   return request.get<ApiResponse<SalaryDifferenceItem[]>>('/employees/salary-differences');
 }
+
+export function generateSalarySettlement(recordId: string) {
+  return request.post<ApiResponse<{ transactionId: string; type: 'expense' | 'income'; amount: number; alreadyExists: boolean }>>(
+    `/employees/salary-records/${recordId}/generate-settlement`,
+  );
+}

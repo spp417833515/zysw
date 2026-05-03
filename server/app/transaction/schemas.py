@@ -68,6 +68,13 @@ class TransactionUpdate(BaseModel):
 
 class ConfirmPaymentRequest(BaseModel):
     accountType: str  # company | personal
+    accountId: Optional[str] = None  # 若 txn.account_id 为空，则用此值绑定并扣账户
+
+
+class BatchConfirmPaymentRequest(BaseModel):
+    ids: List[str]
+    accountType: str  # company | personal
+    accountId: Optional[str] = None
 
 
 class ConfirmInvoiceRequest(BaseModel):

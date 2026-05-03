@@ -6,6 +6,10 @@ from sqlalchemy import select, or_, func, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.employee.models import Employee, SalaryRecord
+from app.employee.salary_domain import (
+    SalaryCalculator, SalaryPeriod, TaxStrategy,
+    make_salary_diff_marker, make_salary_diff_like_pattern,
+)
 from app.employee.schemas import EmployeeCreate, EmployeeUpdate
 
 
@@ -34,19 +38,12 @@ CUMULATIVE_TAX_BRACKETS = [
 THRESHOLD = 5000  # 起征点
 
 
-def calc_monthly_salary(base_salary: float, entry_date_str: str, year: int, month: int, pay_day: int) -> float:
-    """计算某月应发工资，入职首月按实际天数折算"""
-    try:
-        entry = datetime.fromisoformat(entry_date_str)
-    except (ValueError, TypeError):
-        return base_salary
-    if year == entry.year and month == entry.month:
-        # 入职首月：从入职日到发薪日的天数折算
-        work_days = pay_day - entry.day
-        if work_days <= 0:
-            return 0.0
-        return round(base_salary / 30 * work_days, 2)
-    return base_salary
+def calc_monthly_salary(base_salary: float, entry_date_str: str, year: int, month: int, pay_day: int = 0) -> float:
+    """计算某月应发工资（入职首月按实际天数折算，与 pay_day 无关）。
+
+    pay_day 参数保留为兼容签名，实际不再使用。
+    """
+    return SalaryCalculator.prorate_first_month(base_salary, entry_date_str, year, month)
 
 
 def calc_tax(salary: float, social_rate: float = 0, fund_rate: float = 0, special_deduction: float = 0) -> dict:
@@ -190,36 +187,37 @@ FIELD_MAP = {
     "socialInsuranceRate": "social_insurance_rate",
     "housingFundRate": "housing_fund_rate",
     "specialDeduction": "special_deduction",
+    "selfTaxFiling": "self_tax_filing",
 }
 
 
-async def _to_dict(e: Employee, db: AsyncSession) -> dict:
-    base_salary = float(e.base_salary)
+async def _compute_tax_for(e: Employee, db: AsyncSession, year: int, month: int, base_amount: float) -> dict:
+    """统一的当月个税计算：根据员工属性选择策略 + 装载累计上下文。"""
     social_rate = float(e.social_insurance_rate)
     fund_rate = float(e.housing_fund_rate)
     special_ded = float(e.special_deduction)
-
-    # 用累计预扣法计算当月个税
-    now = datetime.now()
-    current_year = now.year
-    current_month = now.month
-    cumulative = await _get_cumulative_data(db, e.id, current_year, current_month)
+    cumulative = await _get_cumulative_data(db, e.id, year, month)
     prev_months = cumulative["month_count"]
-    month_index = prev_months + 1
     prev_records = (await db.execute(
         select(SalaryRecord).where(
-            and_(SalaryRecord.employee_id == e.id, SalaryRecord.year == current_year, SalaryRecord.month < current_month)
+            and_(SalaryRecord.employee_id == e.id, SalaryRecord.year == year, SalaryRecord.month < month)
         )
     )).scalars().all()
     prev_deduction = sum(float(r.base_salary) * (social_rate + fund_rate) / 100 for r in prev_records)
-    tax_info = calc_tax_cumulative(
-        base_salary, social_rate, fund_rate, special_ded,
-        month_index=month_index,
+    return TaxStrategy.for_employee(e).compute(
+        base_amount, social_rate, fund_rate, special_ded,
+        month_index=prev_months + 1,
         prev_cumulative_income=cumulative["prev_cumulative_income"],
         prev_cumulative_tax=cumulative["prev_cumulative_tax"],
         prev_cumulative_deduction=prev_deduction,
         prev_cumulative_special=special_ded * prev_months,
     )
+
+
+async def _to_dict(e: Employee, db: AsyncSession) -> dict:
+    base_salary = float(e.base_salary)
+    now = datetime.now()
+    tax_info = await _compute_tax_for(e, db, now.year, now.month, base_salary)
     return {
         "id": e.id,
         "name": e.name,
@@ -231,9 +229,10 @@ async def _to_dict(e: Employee, db: AsyncSession) -> dict:
         "status": e.status,
         "baseSalary": base_salary,
         "payDay": e.pay_day,
-        "socialInsuranceRate": social_rate,
-        "housingFundRate": fund_rate,
-        "specialDeduction": special_ded,
+        "socialInsuranceRate": float(e.social_insurance_rate),
+        "housingFundRate": float(e.housing_fund_rate),
+        "specialDeduction": float(e.special_deduction),
+        "selfTaxFiling": bool(e.self_tax_filing),
         "notes": e.notes,
         "taxInfo": tax_info,
         "createdAt": e.created_at,
@@ -284,7 +283,8 @@ async def create_employee(db: AsyncSession, data: EmployeeCreate) -> dict:
         department=data.department, position=data.position, entry_date=data.entryDate,
         status=data.status, base_salary=data.baseSalary, pay_day=data.payDay,
         social_insurance_rate=data.socialInsuranceRate, housing_fund_rate=data.housingFundRate,
-        special_deduction=data.specialDeduction, notes=data.notes,
+        special_deduction=data.specialDeduction, self_tax_filing=data.selfTaxFiling,
+        notes=data.notes,
     )
     db.add(e)
     await db.commit()
@@ -315,66 +315,55 @@ async def delete_employee(db: AsyncSession, eid: str) -> bool:
 
 
 async def get_pay_reminders(db: AsyncSession) -> List[dict]:
-    """获取工资发放提醒和入职周年提醒"""
+    """获取工资发放提醒和入职周年提醒。
+
+    语义：上月工资在本月 pay_day 日发放。提醒锁定"上月工资是否已发"。
+    """
     now = datetime.now()
-    today = now.day
-    current_month = now.month
-    current_year = now.year
+    today_date = now.date()
 
     result = await db.execute(select(Employee).where(Employee.status == "active"))
     employees = result.scalars().all()
 
-    # 查询当月已发放记录，已发工资的不再提醒
-    paid_result = await db.execute(
-        select(SalaryRecord).where(
-            SalaryRecord.year == current_year,
-            SalaryRecord.month == current_month,
-        )
-    )
-    paid_employee_ids = {r.employee_id for r in paid_result.scalars().all()}
-
     reminders = []
     for e in employees:
-        # 工资发放提醒：从月初到发薪日后3天，已发放的不提醒
-        if e.id not in paid_employee_ids:
-            diff = e.pay_day - today
-            if diff >= -3:
+        # 上月工资 = 本月 pay_day 日要发的那一笔
+        target = SalaryCalculator.latest_due_period(today_date, e.pay_day)
+        ty, tm = target.year, target.month
+
+        paid = (await db.execute(
+            select(SalaryRecord).where(
+                and_(SalaryRecord.employee_id == e.id,
+                     SalaryRecord.year == ty,
+                     SalaryRecord.month == tm)
+            )
+        )).scalar_one_or_none()
+
+        if not paid:
+            diff = (target.due_date - today_date).days
+            if diff >= -7:  # 已过期 7 天内仍提醒
+                period_label = f"{ty}年{tm}月"
                 if diff > 3:
-                    label = f"{e.name} 工资发放（{diff}天后）"
+                    label = f"{e.name} 工资发放·{period_label}（{diff}天后）"
                 elif diff > 0:
-                    label = f"{e.name} 工资发放（即将）"
+                    label = f"{e.name} 工资发放·{period_label}（即将）"
                 elif diff == 0:
-                    label = f"{e.name} 工资发放（今天）"
+                    label = f"{e.name} 工资发放·{period_label}（今天）"
                 else:
-                    label = f"{e.name} 工资发放（已过期）"
-                # 累计预扣法计算当月个税
-                social_rate = float(e.social_insurance_rate)
-                fund_rate = float(e.housing_fund_rate)
-                special_ded = float(e.special_deduction)
-                cumulative = await _get_cumulative_data(db, e.id, current_year, current_month)
-                prev_months = cumulative["month_count"]
-                month_index = prev_months + 1
-                prev_records = (await db.execute(
-                    select(SalaryRecord).where(
-                        and_(SalaryRecord.employee_id == e.id, SalaryRecord.year == current_year, SalaryRecord.month < current_month)
-                    )
-                )).scalars().all()
-                prev_deduction = sum(float(r.base_salary) * (social_rate + fund_rate) / 100 for r in prev_records)
-                tax_info = calc_tax_cumulative(
-                    float(e.base_salary), social_rate, fund_rate, special_ded,
-                    month_index=month_index,
-                    prev_cumulative_income=cumulative["prev_cumulative_income"],
-                    prev_cumulative_tax=cumulative["prev_cumulative_tax"],
-                    prev_cumulative_deduction=prev_deduction,
-                    prev_cumulative_special=special_ded * prev_months,
-                )
+                    label = f"{e.name} 工资发放·{period_label}（已过期 {abs(diff)} 天）"
+
+                monthly = SalaryCalculator.prorate_first_month(float(e.base_salary), e.entry_date or "", ty, tm)
+                tax_info = await _compute_tax_for(e, db, ty, tm, monthly)
                 reminders.append({
                     "employeeId": e.id,
                     "employeeName": e.name,
                     "type": "pay_day",
                     "label": label,
                     "daysUntil": diff,
-                    "amount": float(e.base_salary),
+                    "payDate": target.due_date.isoformat(),
+                    "salaryYear": ty,
+                    "salaryMonth": tm,
+                    "amount": monthly,
                     "taxInfo": tax_info,
                 })
         # 入职周年提醒：入职日期前后3天
@@ -467,33 +456,10 @@ async def confirm_salary(db: AsyncSession, employee_id: str, year: int, month: i
     monthly_salary = calc_monthly_salary(float(e.base_salary), e.entry_date, year, month, e.pay_day)
 
     if manual_tax is not None:
-        # 手动填写个税
         tax = round(manual_tax, 2)
         net_salary = round(monthly_salary - tax, 2)
     else:
-        # 累计预扣法：获取当年前几月累计数据
-        social_rate = float(e.social_insurance_rate)
-        fund_rate = float(e.housing_fund_rate)
-        special_ded = float(e.special_deduction)
-        cumulative = await _get_cumulative_data(db, employee_id, year, month)
-        prev_months = cumulative["month_count"]
-        month_index = prev_months + 1
-        prev_deduction = sum(
-            float(r.base_salary) * (social_rate + fund_rate) / 100
-            for r in (await db.execute(
-                select(SalaryRecord).where(
-                    and_(SalaryRecord.employee_id == employee_id, SalaryRecord.year == year, SalaryRecord.month < month)
-                )
-            )).scalars().all()
-        )
-        tax_info = calc_tax_cumulative(
-            monthly_salary, social_rate, fund_rate, special_ded,
-            month_index=month_index,
-            prev_cumulative_income=cumulative["prev_cumulative_income"],
-            prev_cumulative_tax=cumulative["prev_cumulative_tax"],
-            prev_cumulative_deduction=prev_deduction,
-            prev_cumulative_special=special_ded * prev_months,
-        )
+        tax_info = await _compute_tax_for(e, db, year, month, monthly_salary)
         tax = tax_info["tax"]
         net_salary = tax_info["netSalary"]
 
@@ -503,11 +469,8 @@ async def confirm_salary(db: AsyncSession, employee_id: str, year: int, month: i
     total_deduct = Decimal(str(round(paid_amount + transfer_fee, 2)))
     now = datetime.now(timezone.utc).isoformat()
 
-    # 安全的发薪日期（避免如2月31日等无效日期）
-    import calendar
-    max_day = calendar.monthrange(year, month)[1]
-    safe_pay_day = min(e.pay_day, max_day)
-    pay_date = f"{year}-{month:02d}-{safe_pay_day:02d}"
+    # 发薪日期：M月工资在 (M+1)月 pay_day 日发放（由 SalaryPeriod 处理跨年/小月）
+    pay_date = SalaryPeriod(year, month, e.pay_day).due_date.isoformat()
 
     def _make_txn(amount: float, category_id: str, description: str) -> Transaction:
         return Transaction(
@@ -550,8 +513,9 @@ async def confirm_salary(db: AsyncSession, employee_id: str, year: int, month: i
                 size=v.get("size", 0),
             ))
 
+    record_id = str(uuid.uuid4())
     record = SalaryRecord(
-        id=str(uuid.uuid4()),
+        id=record_id,
         employee_id=employee_id,
         employee_name=e.name,
         year=year,
@@ -563,6 +527,30 @@ async def confirm_salary(db: AsyncSession, employee_id: str, year: int, month: i
         confirmed_at=now,
     )
     db.add(record)
+
+    # 差额：自动生成待处理流水，落入"待支出 / 待到账"流程
+    diff_amount = round(net_salary - paid_amount, 2)
+    if diff_amount != 0:
+        diff_is_underpaid = diff_amount > 0
+        marker = make_salary_diff_marker(record_id)
+        diff_txn = Transaction(
+            id=str(uuid.uuid4()),
+            type="expense" if diff_is_underpaid else "income",
+            amount=abs(diff_amount),
+            date=pay_date,
+            category_id="25ad1b78-e213-42f3-9d39-3db46e117208",
+            account_id="",  # 留空，由合并付款/确认到账时指定
+            description=(
+                f"{marker} 工资补发 - {e.name} - {year}年{month}月"
+                if diff_is_underpaid else
+                f"{marker} 工资多发回收 - {e.name} - {year}年{month}月"
+            ),
+            tags="[]",
+            payment_confirmed=False,
+            invoice_needed=False,
+        )
+        db.add(diff_txn)
+
     await db.commit()
     await db.refresh(record)
     difference = round(net_salary - paid_amount, 2)
@@ -585,17 +573,94 @@ async def confirm_salary(db: AsyncSession, employee_id: str, year: int, month: i
     }
 
 
+async def generate_salary_settlement(db: AsyncSession, record_id: str) -> dict:
+    """为历史 SalaryRecord 的差额生成对应的待处理流水。
+
+    幂等：若已有未确认的差额流水则不重复创建，直接返回现有项。
+    返回创建/已有的差额流水信息。
+    """
+    from app.transaction.models import Transaction
+
+    record = await db.get(SalaryRecord, record_id)
+    if not record:
+        raise ValueError("发放记录不存在")
+
+    # 计算当前差额（同 get_salary_differences 逻辑）
+    confirmed_total = 0.0
+    if record.transaction_id:
+        main_txn = await db.get(Transaction, record.transaction_id)
+        if main_txn and main_txn.payment_confirmed:
+            confirmed_total += float(main_txn.amount)
+    pattern = make_salary_diff_like_pattern(record.id)
+    linked = (await db.execute(
+        select(Transaction).where(Transaction.description.like(pattern))
+    )).scalars().all()
+    pending = [t for t in linked if not t.payment_confirmed]
+    for t in linked:
+        if t.payment_confirmed:
+            if t.type == "expense":
+                confirmed_total += float(t.amount)
+            elif t.type == "income":
+                confirmed_total -= float(t.amount)
+
+    diff = round(float(record.net_salary) - confirmed_total, 2)
+    if diff == 0:
+        raise ValueError("当前无差额，无需生成流水")
+    if pending:
+        # 已有待处理流水，幂等返回
+        t = pending[0]
+        return {
+            "transactionId": t.id, "type": t.type, "amount": float(t.amount),
+            "alreadyExists": True,
+        }
+
+    is_underpaid = diff > 0
+    marker = make_salary_diff_marker(record.id)
+    pay_date = SalaryPeriod(record.year, record.month,
+                            await _employee_pay_day(db, record.employee_id)).due_date.isoformat()
+    diff_txn = Transaction(
+        id=str(uuid.uuid4()),
+        type="expense" if is_underpaid else "income",
+        amount=abs(diff),
+        date=pay_date,
+        category_id="25ad1b78-e213-42f3-9d39-3db46e117208",
+        account_id="",
+        description=(
+            f"{marker} 工资补发 - {record.employee_name} - {record.year}年{record.month}月"
+            if is_underpaid else
+            f"{marker} 工资多发回收 - {record.employee_name} - {record.year}年{record.month}月"
+        ),
+        tags="[]",
+        payment_confirmed=False,
+        invoice_needed=False,
+    )
+    db.add(diff_txn)
+    await db.commit()
+    await db.refresh(diff_txn)
+    return {
+        "transactionId": diff_txn.id,
+        "type": diff_txn.type,
+        "amount": float(diff_txn.amount),
+        "alreadyExists": False,
+    }
+
+
+async def _employee_pay_day(db: AsyncSession, employee_id: str) -> int:
+    e = await db.get(Employee, employee_id)
+    return e.pay_day if e else 1
+
+
 async def get_unpaid_salaries(db: AsyncSession) -> dict:
-    """获取所有未发放工资的月份（从入职月到当前月，当月须过发薪日才计入）"""
-    now = datetime.now()
-    current_year = now.year
-    current_month = now.month
-    current_day = now.day
+    """获取所有未发放工资的月份。
+
+    语义：M月工资在 (M+1)月 pay_day 日发放；只有「(M+1)月pay_day日 ≤ today」
+    时才将 M 计为已到期/未付。由 SalaryCalculator.iter_unpaid_periods 保证。
+    """
+    today = datetime.now().date()
 
     result = await db.execute(select(Employee).where(Employee.status == "active"))
     employees = result.scalars().all()
 
-    # 获取所有已发放记录
     paid_result = await db.execute(select(SalaryRecord))
     paid_set = {(r.employee_id, r.year, r.month) for r in paid_result.scalars().all()}
 
@@ -604,55 +669,26 @@ async def get_unpaid_salaries(db: AsyncSession) -> dict:
     for e in employees:
         if not e.entry_date or float(e.base_salary) <= 0:
             continue
-        try:
-            entry = datetime.fromisoformat(e.entry_date)
-        except (ValueError, TypeError):
-            continue
 
-        social_rate = float(e.social_insurance_rate)
-        fund_rate = float(e.housing_fund_rate)
-        special_ded = float(e.special_deduction)
-
-        # 从入职月开始到当前月
-        y, m = entry.year, entry.month
-        while (y, m) <= (current_year, current_month):
-            # 当月未到发薪日，工资尚未到期，不算欠款
-            if y == current_year and m == current_month and current_day < e.pay_day:
-                break
-            if (e.id, y, m) not in paid_set:
-                monthly = calc_monthly_salary(float(e.base_salary), e.entry_date, y, m, e.pay_day)
-                if monthly > 0:
-                    # 累计预扣法计算
-                    cumulative = await _get_cumulative_data(db, e.id, y, m)
-                    prev_months = cumulative["month_count"]
-                    month_index = prev_months + 1
-                    prev_records = (await db.execute(
-                        select(SalaryRecord).where(
-                            and_(SalaryRecord.employee_id == e.id, SalaryRecord.year == y, SalaryRecord.month < m)
-                        )
-                    )).scalars().all()
-                    prev_deduction = sum(float(r.base_salary) * (social_rate + fund_rate) / 100 for r in prev_records)
-                    tax_info = calc_tax_cumulative(
-                        monthly, social_rate, fund_rate, special_ded,
-                        month_index=month_index,
-                        prev_cumulative_income=cumulative["prev_cumulative_income"],
-                        prev_cumulative_tax=cumulative["prev_cumulative_tax"],
-                        prev_cumulative_deduction=prev_deduction,
-                        prev_cumulative_special=special_ded * prev_months,
-                    )
-                    unpaid.append({
-                        "employeeId": e.id,
-                        "employeeName": e.name,
-                        "year": y,
-                        "month": m,
-                        "baseSalary": monthly,
-                        "netSalary": tax_info["netSalary"],
-                    })
-                    total_amount += monthly
-            m += 1
-            if m > 12:
-                m = 1
-                y += 1
+        for period in SalaryCalculator.iter_unpaid_periods(e.entry_date, e.pay_day, today):
+            y, m = period.year, period.month
+            if (e.id, y, m) in paid_set:
+                continue
+            monthly = SalaryCalculator.prorate_first_month(float(e.base_salary), e.entry_date, y, m)
+            if monthly <= 0:
+                continue
+            tax_info = await _compute_tax_for(e, db, y, m, monthly)
+            unpaid.append({
+                "employeeId": e.id,
+                "employeeName": e.name,
+                "year": y,
+                "month": m,
+                "baseSalary": monthly,
+                "netSalary": tax_info["netSalary"],
+                "selfTaxFiling": bool(e.self_tax_filing),
+                "payDate": period.due_date.isoformat(),
+            })
+            total_amount += monthly
 
     return {"count": len(unpaid), "totalAmount": round(total_amount, 2), "items": unpaid}
 
@@ -711,18 +747,46 @@ async def update_salary_record(db: AsyncSession, record_id: str, data) -> Option
 
 
 async def get_salary_differences(db: AsyncSession) -> list:
-    """获取有差额的工资记录（欠员工 / 员工欠公司）"""
+    """获取有差额的工资记录。
+
+    新模型：actualPaid = sum(主流水 + 差额流水中已确认的部分)。
+    差额流水未确认时，差额仍存在（在 待支出/待到账 中等待处理）；
+    差额流水被合并付款确认后，actualPaid 自动变为 netSalary，差额消失。
+    """
     from app.transaction.models import Transaction
 
     records = (await db.execute(select(SalaryRecord))).scalars().all()
     result = []
     for r in records:
-        actual_paid = float(r.net_salary)
+        # 主流水（如有）
+        confirmed_total = 0.0
         if r.transaction_id:
-            txn = await db.get(Transaction, r.transaction_id)
-            if txn:
-                actual_paid = float(txn.amount)
-        diff = round(float(r.net_salary) - actual_paid, 2)
+            main_txn = await db.get(Transaction, r.transaction_id)
+            if main_txn and main_txn.payment_confirmed:
+                confirmed_total += float(main_txn.amount)
+
+        # 差额关联流水：通过描述前缀稳定标记定位
+        pattern = make_salary_diff_like_pattern(r.id)
+        linked = (await db.execute(
+            select(Transaction).where(Transaction.description.like(pattern))
+        )).scalars().all()
+        pending_settlement = []  # 未确认的差额流水
+        for t in linked:
+            if t.payment_confirmed:
+                # 多发回收（income）已收 → 抵减；补发（expense）已付 → 增加 actualPaid
+                if t.type == "expense":
+                    confirmed_total += float(t.amount)
+                elif t.type == "income":
+                    confirmed_total -= float(t.amount)
+            else:
+                pending_settlement.append({
+                    "transactionId": t.id,
+                    "type": t.type,
+                    "amount": float(t.amount),
+                })
+
+        net = float(r.net_salary)
+        diff = round(net - confirmed_total, 2)
         if diff != 0:
             result.append({
                 "id": r.id,
@@ -732,11 +796,12 @@ async def get_salary_differences(db: AsyncSession) -> list:
                 "month": r.month,
                 "baseSalary": float(r.base_salary),
                 "tax": float(r.tax),
-                "netSalary": float(r.net_salary),
-                "actualPaid": actual_paid,
+                "netSalary": net,
+                "actualPaid": round(confirmed_total, 2),
                 "difference": diff,
                 "type": "underpaid" if diff > 0 else "overpaid",
                 "label": f"欠{r.employee_name} ¥{abs(diff)}" if diff > 0 else f"{r.employee_name}欠公司 ¥{abs(diff)}",
+                "pendingSettlements": pending_settlement,
                 "confirmedAt": r.confirmed_at,
             })
     return result

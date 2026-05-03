@@ -6,6 +6,7 @@ from app.deps import get_db
 from app.response import error, success
 from app.transaction import service
 from app.transaction.schemas import (
+    BatchConfirmPaymentRequest,
     BatchTransactionCreate,
     ConfirmInvoiceRequest,
     ConfirmPaymentRequest,
@@ -45,6 +46,15 @@ async def batch_create(data: BatchTransactionCreate, db: AsyncSession = Depends(
 async def batch_confirm_tax(data: ConfirmTaxRequest, db: AsyncSession = Depends(get_db)):
     result = await service.batch_confirm_tax(db, data.taxPeriod)
     return success(result)
+
+
+@router.post("/batch-confirm-payment")
+async def batch_confirm_payment(data: BatchConfirmPaymentRequest, db: AsyncSession = Depends(get_db)):
+    try:
+        result = await service.batch_confirm_payment(db, data.ids, data.accountType, data.accountId)
+        return success(result)
+    except ValueError as e:
+        return error(str(e))
 
 
 @router.get("")
@@ -115,7 +125,10 @@ async def delete_transaction(txn_id: str, db: AsyncSession = Depends(get_db)):
 async def confirm_payment(
     txn_id: str, data: ConfirmPaymentRequest, db: AsyncSession = Depends(get_db)
 ):
-    txn = await service.confirm_payment(db, txn_id, data.accountType)
+    try:
+        txn = await service.confirm_payment(db, txn_id, data.accountType, data.accountId)
+    except ValueError as e:
+        return error(str(e))
     if not txn:
         return error("Transaction not found", code=404)
     return success(txn)

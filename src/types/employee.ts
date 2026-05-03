@@ -12,6 +12,7 @@ export interface Employee {
   socialInsuranceRate: number;
   housingFundRate: number;
   specialDeduction: number;
+  selfTaxFiling: boolean;
   notes: string;
   taxInfo: TaxInfo;
   createdAt: string;
@@ -61,12 +62,20 @@ export interface UnpaidSalaryItem {
   month: number;
   baseSalary: number;
   netSalary: number;
+  selfTaxFiling?: boolean;
+  payDate?: string;
 }
 
 export interface UnpaidSalaries {
   count: number;
   totalAmount: number;
   items: UnpaidSalaryItem[];
+}
+
+export interface PendingSettlement {
+  transactionId: string;
+  type: 'income' | 'expense';
+  amount: number;
 }
 
 export interface SalaryDifferenceItem {
@@ -82,5 +91,6 @@ export interface SalaryDifferenceItem {
   difference: number;
   type: 'underpaid' | 'overpaid';
   label: string;
+  pendingSettlements: PendingSettlement[];
   confirmedAt: string;
 }

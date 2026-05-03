@@ -28,18 +28,22 @@ import type { ReminderItem, RecurringReminderItem } from '@/utils/reminder';
 import { useThemeToken } from '@/hooks/useThemeToken';
 import AmountText from '@/components/AmountText';
 import PaymentConfirmModal from './components/PaymentConfirmModal';
+import BatchPaymentConfirmModal from './components/BatchPaymentConfirmModal';
 import InvoiceConfirmModal from './components/InvoiceConfirmModal';
 import TaxDeclareModal from './components/TaxDeclareModal';
 import SalaryConfirmModal from './components/SalaryConfirmModal';
 import TransactionDetailModal from '@/pages/Transaction/components/TransactionDetailModal';
 import { useUnpaidSalaries } from '@/hooks/useUnpaidSalaries';
+import { useBatchSelection } from '@/hooks/useBatchSelection';
 import { baseUnpaidSalaryColumns, makeUnpaidActionColumn } from '@/pages/shared/unpaidSalaryColumns';
 import type { Transaction } from '@/types/transaction';
 import type { UnpaidSalaryItem, SalaryDifferenceItem } from '@/types/employee';
-import { getSalaryDifferences } from '@/api/employee';
+import { getSalaryDifferences, generateSalarySettlement } from '@/api/employee';
 import { formatAmount } from '@/utils/format';
 
 const { Text } = Typography;
+
+type BatchFlow = 'income' | 'expense';
 
 const Tasks: React.FC = () => {
   const navigate = useNavigate();
@@ -72,6 +76,27 @@ const Tasks: React.FC = () => {
   // 工资差额
   const [diffItems, setDiffItems] = useState<SalaryDifferenceItem[]>([]);
   const [diffLoading, setDiffLoading] = useState(false);
+
+  // 合并付款
+  const incomeBatch = useBatchSelection(pendingIncomePayments);
+  const expenseBatch = useBatchSelection(pendingExpensePayments);
+  const [batchPayOpen, setBatchPayOpen] = useState(false);
+  const [batchPayFlow, setBatchPayFlow] = useState<BatchFlow>('expense');
+
+  const openBatchPay = (flow: BatchFlow) => {
+    setBatchPayFlow(flow);
+    setBatchPayOpen(true);
+  };
+  const handleBatchPaySuccess = () => {
+    if (batchPayFlow === 'income') incomeBatch.clear();
+    else expenseBatch.clear();
+    fetchPendingData();
+  };
+  const handleTabChange = (key: string) => {
+    setActiveTab(key);
+    incomeBatch.clear();
+    expenseBatch.clear();
+  };
 
   // 一键申报
   const [batchTaxModalOpen, setBatchTaxModalOpen] = useState(false);
@@ -331,12 +356,44 @@ const Tasks: React.FC = () => {
       ),
     },
     {
-      title: '待办', key: 'action', width: 180,
-      render: (_: unknown, r: SalaryDifferenceItem) => (
-        <Text type="secondary" style={{ fontSize: 12 }}>
-          {r.type === 'underpaid' ? `需补发 ¥${formatAmount(r.difference)} 给${r.employeeName}` : `${r.employeeName}需偿还 ¥${formatAmount(Math.abs(r.difference))}`}
-        </Text>
-      ),
+      title: '操作', key: 'action', width: 220,
+      render: (_: unknown, r: SalaryDifferenceItem) => {
+        const hasPending = (r.pendingSettlements?.length ?? 0) > 0;
+        if (hasPending) {
+          const targetTab = r.type === 'underpaid' ? 'expense-payment' : 'income-payment';
+          return (
+            <Space direction="vertical" size={2}>
+              <Tag color="blue">已在{r.type === 'underpaid' ? '待支出' : '待到账'}</Tag>
+              <Button size="small" type="link" style={{ padding: 0 }}
+                onClick={() => setActiveTab(targetTab)}>
+                前往合并{r.type === 'underpaid' ? '付款' : '到账'} →
+              </Button>
+            </Space>
+          );
+        }
+        return (
+          <Button size="small" type="primary" ghost onClick={async () => {
+            try {
+              const res = await generateSalarySettlement(r.id);
+              if (res.code === 0) {
+                message.success(
+                  res.data.alreadyExists
+                    ? '已存在待处理流水'
+                    : `已生成待处理流水 ¥${formatAmount(res.data.amount)}，可在${res.data.type === 'expense' ? '待支出' : '待到账'}中处理`,
+                );
+                fetchPendingData();
+                fetchDifferences();
+              } else {
+                message.error(res.message || '生成失败');
+              }
+            } catch (e) {
+              message.error(e instanceof Error ? e.message : '生成失败');
+            }
+          }}>
+            生成{r.type === 'underpaid' ? '补发' : '回收'}流水
+          </Button>
+        );
+      },
     },
   ];
 
@@ -346,26 +403,46 @@ const Tasks: React.FC = () => {
       key: 'income-payment',
       label: `待到账 (${pendingIncomePayments.length})`,
       children: (
-        <Table
-          rowKey="id"
-          columns={incomePaymentColumns}
-          dataSource={pendingIncomePayments}
-          pagination={{ pageSize: 10 }}
-          size="middle"
-        />
+        <>
+          {incomeBatch.keys.length > 0 && (
+            <div style={{ marginBottom: 12, textAlign: 'right' }}>
+              <Button type="primary" icon={<DollarOutlined />} onClick={() => openBatchPay('income')}>
+                合并到账 ({incomeBatch.keys.length} 笔, ¥{formatAmount(incomeBatch.total)})
+              </Button>
+            </div>
+          )}
+          <Table
+            rowKey="id"
+            columns={incomePaymentColumns}
+            dataSource={pendingIncomePayments}
+            rowSelection={{ selectedRowKeys: incomeBatch.keys, onChange: incomeBatch.setKeys }}
+            pagination={{ pageSize: 10 }}
+            size="middle"
+          />
+        </>
       ),
     },
     {
       key: 'expense-payment',
       label: `待支出 (${pendingExpensePayments.length})`,
       children: (
-        <Table
-          rowKey="id"
-          columns={expensePaymentColumns}
-          dataSource={pendingExpensePayments}
-          pagination={{ pageSize: 10 }}
-          size="middle"
-        />
+        <>
+          {expenseBatch.keys.length > 0 && (
+            <div style={{ marginBottom: 12, textAlign: 'right' }}>
+              <Button type="primary" danger icon={<DollarOutlined />} onClick={() => openBatchPay('expense')}>
+                合并付款 ({expenseBatch.keys.length} 笔, ¥{formatAmount(expenseBatch.total)})
+              </Button>
+            </div>
+          )}
+          <Table
+            rowKey="id"
+            columns={expensePaymentColumns}
+            dataSource={pendingExpensePayments}
+            rowSelection={{ selectedRowKeys: expenseBatch.keys, onChange: expenseBatch.setKeys }}
+            pagination={{ pageSize: 10 }}
+            size="middle"
+          />
+        </>
       ),
     },
     {
@@ -487,7 +564,7 @@ const Tasks: React.FC = () => {
         ))}
       </Row>
 
-      <Tabs activeKey={activeTab} onChange={setActiveTab} items={tabItems} />
+      <Tabs activeKey={activeTab} onChange={handleTabChange} items={tabItems} />
 
       <PaymentConfirmModal
         open={paymentModalOpen}
@@ -515,6 +592,13 @@ const Tasks: React.FC = () => {
         item={payingItem}
         onClose={() => { setSalaryModalOpen(false); setPayingItem(null); }}
         onSuccess={fetchUnpaid}
+      />
+      <BatchPaymentConfirmModal
+        open={batchPayOpen}
+        items={batchPayFlow === 'income' ? incomeBatch.selected : expenseBatch.selected}
+        flow={batchPayFlow}
+        onClose={() => setBatchPayOpen(false)}
+        onSuccess={handleBatchPaySuccess}
       />
       <Modal
         title="一键申报"

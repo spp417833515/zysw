@@ -34,6 +34,7 @@ class EmployeeCreate(BaseModel):
     socialInsuranceRate: float = 0
     housingFundRate: float = 0
     specialDeduction: float = 0
+    selfTaxFiling: bool = False
     notes: str = ""
 
 
@@ -55,4 +56,5 @@ class EmployeeUpdate(BaseModel):
     socialInsuranceRate: Optional[float] = None
     housingFundRate: Optional[float] = None
     specialDeduction: Optional[float] = None
+    selfTaxFiling: Optional[bool] = None
     notes: Optional[str] = None

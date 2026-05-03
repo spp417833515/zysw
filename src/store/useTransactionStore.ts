@@ -11,10 +11,12 @@ import {
   skipInvoice as apiSkipInvoice,
   confirmTax as apiConfirmTax,
   batchConfirmTax as apiBatchConfirmTax,
+  batchConfirmPayment as apiBatchConfirmPayment,
   getPendingPayments,
   getPendingInvoices,
   getPendingTaxes,
 } from '@/api/transaction';
+import type { BatchConfirmPaymentResult } from '@/api/transaction';
 import { useAccountStore } from '@/store/useAccountStore';
 
 interface TransactionState {
@@ -44,6 +46,7 @@ interface TransactionState {
   skipInvoice: (id: string) => Promise<void>;
   confirmTaxDeclare: (id: string, taxPeriod: string) => Promise<void>;
   batchConfirmTaxDeclare: (taxPeriod: string) => Promise<{ count: number; declaredAt: string }>;
+  batchConfirmPayment: (ids: string[], accountType: PaymentAccountType, accountId?: string) => Promise<BatchConfirmPaymentResult>;
 }
 
 const defaultFilter: TransactionFilter = {};
@@ -190,6 +193,16 @@ export const useTransactionStore = create<TransactionState>((set, get) => ({
       return res.data;
     }
     throw new Error('批量申报失败');
+  },
+
+  batchConfirmPayment: async (ids, accountType, accountId) => {
+    const res = await apiBatchConfirmPayment(ids, accountType, accountId);
+    if (res.code === 0) {
+      useAccountStore.getState().fetchAccounts();
+      get().fetchPendingData();
+      return res.data;
+    }
+    throw new Error('合并付款失败');
   },
 }));
 

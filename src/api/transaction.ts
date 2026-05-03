@@ -58,3 +58,13 @@ export function batchCreateTransactions(items: Partial<Transaction>[]) {
 export function batchConfirmTax(taxPeriod: string) {
   return request.post<ApiResponse<{ count: number; taxPeriod: string; declaredAt: string }>>('/transactions/batch-confirm-tax', { taxPeriod });
 }
+
+export interface BatchConfirmPaymentResult {
+  success: number;
+  successIds: string[];
+  skipped: { id: string; reason: string }[];
+}
+
+export function batchConfirmPayment(ids: string[], accountType: string, accountId?: string) {
+  return request.post<ApiResponse<BatchConfirmPaymentResult>>('/transactions/batch-confirm-payment', { ids, accountType, accountId });
+}

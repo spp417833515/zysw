@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react';
-import { Modal, Form, Input, InputNumber, Select, DatePicker } from 'antd';
+import { Modal, Form, Input, InputNumber, Select, DatePicker, Switch, Tooltip } from 'antd';
+import { QuestionCircleOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import type { Employee } from '@/types/employee';
 
@@ -23,7 +24,7 @@ const EmployeeForm: React.FC<Props> = ({ open, editingEmployee, onOk, onCancel, 
         });
       } else {
         form.resetFields();
-        form.setFieldsValue({ status: 'active', payDay: 15, socialInsuranceRate: 0, housingFundRate: 0, specialDeduction: 0 });
+        form.setFieldsValue({ status: 'active', payDay: 15, socialInsuranceRate: 0, housingFundRate: 0, specialDeduction: 0, selfTaxFiling: false });
       }
     }
   }, [open, editingEmployee, form]);
@@ -91,6 +92,20 @@ const EmployeeForm: React.FC<Props> = ({ open, editingEmployee, onOk, onCancel, 
             <InputNumber min={0} style={{ width: '100%' }} />
           </Form.Item>
         </div>
+        <Form.Item
+          name="selfTaxFiling"
+          valuePropName="checked"
+          label={
+            <span>
+              员工自行缴纳税费&nbsp;
+              <Tooltip title="开启后：公司全额发放工资，由员工自行申报和缴纳个税。系统不再自动扣税。">
+                <QuestionCircleOutlined style={{ color: '#999' }} />
+              </Tooltip>
+            </span>
+          }
+        >
+          <Switch checkedChildren="自缴" unCheckedChildren="代扣" />
+        </Form.Item>
         <Form.Item name="notes" label="备注">
           <Input.TextArea rows={2} placeholder="备注信息" />
         </Form.Item>

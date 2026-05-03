@@ -124,6 +124,22 @@ async def salary_differences(db: AsyncSession = Depends(get_db)):
     return success(data)
 
 
+@router.post("/salary-records/{record_id}/generate-settlement")
+async def generate_salary_settlement(
+    record_id: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """为指定 SalaryRecord 的差额生成待处理流水（用于处理历史差额）。"""
+    try:
+        data = await service.generate_salary_settlement(db, record_id)
+        return success(data)
+    except ValueError as e:
+        return error(str(e))
+    except Exception as e:
+        import traceback; traceback.print_exc()
+        return error(f"生成失败：{e}")
+
+
 @router.put("/salary-records/{record_id}")
 async def update_salary_record(
     record_id: str,

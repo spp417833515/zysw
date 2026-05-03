@@ -26,6 +26,8 @@ class Employee(Base):
     housing_fund_rate: Mapped[float] = mapped_column(Numeric(6, 4), default=0)  # 公积金个人比例 %
     # 专项附加扣除
     special_deduction: Mapped[float] = mapped_column(Numeric(12, 2), default=0)  # 专项附加扣除总额/月
+    # 员工自行缴税：True → 公司全额发，员工自报税；False → 公司代扣代缴
+    self_tax_filing: Mapped[bool] = mapped_column(Boolean, default=False)
     notes: Mapped[str] = mapped_column(Text, default="")
     created_at: Mapped[str] = mapped_column(
         String(30), default=lambda: datetime.now(timezone.utc).isoformat()
