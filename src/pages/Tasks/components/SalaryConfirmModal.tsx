@@ -35,8 +35,9 @@ const SalaryConfirmModal: React.FC<SalaryConfirmModalProps> = ({
 
   const baseSalary = item?.baseSalary ?? 0;
   const isSelfFiling = !!item?.selfTaxFiling;
-  // 税后应发 = 基本工资 - 个税（自缴模式下个税恒为0）
-  const netSalary = baseSalary - manualTax;
+  // 自缴模式：netSalary 始终 = base，tax 仅作 memo（员工自缴，不从工资扣除）
+  // 代扣模式：netSalary = base - tax
+  const netSalary = isSelfFiling ? baseSalary : baseSalary - manualTax;
   // 差额 = 应发(税后) - 实付
   const difference = netSalary - actualPaid;
   // 合计支出（实付 + 可选手续费）
@@ -58,11 +59,15 @@ const SalaryConfirmModal: React.FC<SalaryConfirmModalProps> = ({
     }
   }, [item]);
 
-  // 当个税变化时，自动更新实付金额为税后应发
+  // 当个税变化时：
+  // - 代扣模式：tax 影响应发税后，自动同步实付为 base - tax
+  // - 自缴模式：tax 仅是 memo，不联动实付（用户照常发全额）
   const handleTaxChange = (val: number | null) => {
     const tax = val ?? 0;
     setManualTax(tax);
-    setActualPaid(Math.round((baseSalary - tax) * 100) / 100);
+    if (!isSelfFiling) {
+      setActualPaid(Math.round((baseSalary - tax) * 100) / 100);
+    }
   };
 
   const handleOk = async () => {
@@ -128,7 +133,7 @@ const SalaryConfirmModal: React.FC<SalaryConfirmModalProps> = ({
                 type="info"
                 showIcon
                 message="员工自行缴税"
-                description="该员工设置为自缴税，公司全额发放，由员工自行申报。个税默认 0，如有特殊扣减可手动调整。"
+                description="公司全额发放工资到员工。个税字段仅作记账提醒，确认后会生成「应缴个税」待支出条目（员工从私户缴纳）。"
               />
             )}
 

@@ -9,6 +9,7 @@ from app.employee.models import Employee, SalaryRecord
 from app.employee.salary_domain import (
     SalaryCalculator, SalaryPeriod, TaxStrategy,
     make_salary_diff_marker, make_salary_diff_like_pattern,
+    make_salary_tax_marker,
 )
 from app.employee.schemas import EmployeeCreate, EmployeeUpdate
 
@@ -455,7 +456,11 @@ async def confirm_salary(db: AsyncSession, employee_id: str, year: int, month: i
 
     monthly_salary = calc_monthly_salary(float(e.base_salary), e.entry_date, year, month, e.pay_day)
 
-    if manual_tax is not None:
+    if e.self_tax_filing:
+        # 自缴模式：tax 仅作 memo（员工自缴），net_salary 始终 = base，不影响应发金额
+        tax = round(manual_tax, 2) if manual_tax is not None else 0.0
+        net_salary = monthly_salary
+    elif manual_tax is not None:
         tax = round(manual_tax, 2)
         net_salary = round(monthly_salary - tax, 2)
     else:
@@ -550,6 +555,24 @@ async def confirm_salary(db: AsyncSession, employee_id: str, year: int, month: i
             invoice_needed=False,
         )
         db.add(diff_txn)
+
+    # 自缴模式 + 用户填写了非零个税 → 创建应缴个税 memo 待支出
+    # 用户场景：发放全额工资给员工，员工自行从私户缴税。系统记录这笔应缴款以免遗忘。
+    if e.self_tax_filing and tax > 0:
+        tax_marker = make_salary_tax_marker(record_id)
+        tax_memo_txn = Transaction(
+            id=str(uuid.uuid4()),
+            type="expense",
+            amount=round(tax, 2),
+            date=pay_date,
+            category_id="25ad1b78-e213-42f3-9d39-3db46e117208",
+            account_id="",
+            description=f"{tax_marker} 员工自缴个税 - {e.name} - {year}年{month}月",
+            tags="[]",
+            payment_confirmed=False,
+            invoice_needed=False,
+        )
+        db.add(tax_memo_txn)
 
     await db.commit()
     await db.refresh(record)

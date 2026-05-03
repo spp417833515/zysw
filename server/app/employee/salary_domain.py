@@ -12,13 +12,20 @@ from datetime import date, datetime
 from typing import Any, Iterator, Optional
 
 
-# 工资差额流水描述前缀稳定标记（用于关联 SalaryRecord）
+# 工资关联流水描述前缀标记（用于关联 SalaryRecord，按用途区分）
+# [SR:{id}]   = 工资差额（补发/回收），影响 actualPaid 计算
+# [STAX:{id}] = 应缴个税（memo），不影响 actualPaid，仅作待支出提示
 SALARY_DIFF_MARKER_PREFIX = "[SR:"
-SALARY_DIFF_MARKER_SUFFIX = "]"
+SALARY_TAX_MARKER_PREFIX = "[STAX:"
+MARKER_SUFFIX = "]"
 
 
 def make_salary_diff_marker(record_id: str) -> str:
-    return f"{SALARY_DIFF_MARKER_PREFIX}{record_id}{SALARY_DIFF_MARKER_SUFFIX}"
+    return f"{SALARY_DIFF_MARKER_PREFIX}{record_id}{MARKER_SUFFIX}"
+
+
+def make_salary_tax_marker(record_id: str) -> str:
+    return f"{SALARY_TAX_MARKER_PREFIX}{record_id}{MARKER_SUFFIX}"
 
 
 def make_salary_diff_like_pattern(record_id: str) -> str:
