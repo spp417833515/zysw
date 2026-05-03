@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
-import { Modal, Radio, Space, message } from 'antd';
-import type { PaymentAccountType } from '@/types/transaction';
+import { Modal, message } from 'antd';
 import { useTransactionStore } from '@/store/useTransactionStore';
 
 interface PaymentConfirmModalProps {
@@ -14,15 +13,14 @@ const PaymentConfirmModal: React.FC<PaymentConfirmModalProps> = ({
   transactionId,
   onClose,
 }) => {
-  const [accountType, setAccountType] = useState<PaymentAccountType>('company');
   const [loading, setLoading] = useState(false);
   const confirmPayment = useTransactionStore((s) => s.confirmPayment);
 
   const handleOk = async () => {
     setLoading(true);
     try {
-      await confirmPayment(transactionId, accountType);
-      message.success('到账确认成功');
+      await confirmPayment(transactionId, 'company');
+      message.success('确认成功');
       onClose();
     } catch {
       message.error('操作失败，请重试');
@@ -33,7 +31,7 @@ const PaymentConfirmModal: React.FC<PaymentConfirmModalProps> = ({
 
   return (
     <Modal
-      title="确认到账"
+      title="确认"
       open={open}
       onOk={handleOk}
       onCancel={onClose}
@@ -42,18 +40,9 @@ const PaymentConfirmModal: React.FC<PaymentConfirmModalProps> = ({
       confirmLoading={loading}
       destroyOnClose
     >
-      <Space direction="vertical" size="middle" style={{ width: '100%', padding: '16px 0' }}>
-        <div>请确认该笔款项的到账类型：</div>
-        <Radio.Group
-          value={accountType}
-          onChange={(e) => setAccountType(e.target.value)}
-        >
-          <Space direction="vertical">
-            <Radio value="company">公户（对公账户）</Radio>
-            <Radio value="personal">私户（个人账户）</Radio>
-          </Space>
-        </Radio.Group>
-      </Space>
+      <div style={{ padding: '16px 0' }}>
+        确认后该笔将进入「收支流水」并影响账户余额。是否继续？
+      </div>
     </Modal>
   );
 };

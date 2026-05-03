@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
-import { Modal, Radio, Space, Table, Typography, message, Tag, Alert } from 'antd';
-import type { PaymentAccountType, Transaction } from '@/types/transaction';
+import { Modal, Space, Table, Typography, message, Tag, Alert } from 'antd';
+import type { Transaction } from '@/types/transaction';
 import { useTransactionStore } from '@/store/useTransactionStore';
 import { TRANSACTION_TYPE_MAP } from '@/utils/constants';
 import { formatAmount, formatDate } from '@/utils/format';
@@ -21,7 +21,6 @@ interface BatchPaymentConfirmModalProps {
 const BatchPaymentConfirmModal: React.FC<BatchPaymentConfirmModalProps> = ({
   open, items, flow, onClose, onSuccess,
 }) => {
-  const [accountType, setAccountType] = useState<PaymentAccountType>('company');
   const [accountId, setAccountId] = useState<string | undefined>();
   const [loading, setLoading] = useState(false);
   const batchConfirmPayment = useTransactionStore((s) => s.batchConfirmPayment);
@@ -34,11 +33,10 @@ const BatchPaymentConfirmModal: React.FC<BatchPaymentConfirmModalProps> = ({
     () => items.some((i) => !i.accountId),
     [items],
   );
-  const accountRequired = hasUnboundAccount && accountType === 'company';
 
   const handleOk = async () => {
     if (items.length === 0) return;
-    if (accountRequired && !accountId) {
+    if (hasUnboundAccount && !accountId) {
       message.warning('该批次包含未绑定账户的流水（如工资差额），请选择账户');
       return;
     }
@@ -46,7 +44,7 @@ const BatchPaymentConfirmModal: React.FC<BatchPaymentConfirmModalProps> = ({
     try {
       const res = await batchConfirmPayment(
         items.map((i) => i.id),
-        accountType,
+        'company',
         accountId,
       );
       const skipped = res.skipped?.length ?? 0;
@@ -116,30 +114,18 @@ const BatchPaymentConfirmModal: React.FC<BatchPaymentConfirmModalProps> = ({
           <Alert
             type="info"
             showIcon
-            message="本批次包含工资差额等未绑定账户的流水"
-            description="确认时请选择实际收/付账户，系统会扣减/增加该账户余额。"
+            message="本批次包含未绑定账户的流水（如工资差额）"
+            description="请选择实际收/付账户，系统会调整该账户余额。"
           />
         )}
 
         <div>
-          <div style={{ marginBottom: 8 }}>{`${verb}账户类型：`}</div>
-          <Radio.Group value={accountType} onChange={(e) => setAccountType(e.target.value)}>
-            <Space direction="vertical">
-              <Radio value="company">公户（对公账户）</Radio>
-              <Radio value="personal">私户（个人账户）</Radio>
-            </Space>
-          </Radio.Group>
-        </div>
-
-        {accountType === 'company' && (
-          <div>
-            <div style={{ marginBottom: 8 }}>
-              {accountRequired ? <Text type="danger">* </Text> : null}
-              选择具体账户{accountRequired ? '（必选）' : '（可选）'}：
-            </div>
-            <AccountSelect value={accountId} onChange={setAccountId} placeholder="请选择账户" />
+          <div style={{ marginBottom: 8 }}>
+            {hasUnboundAccount ? <Text type="danger">* </Text> : null}
+            选择{verb}账户{hasUnboundAccount ? '（必选）' : '（可选，已绑定账户的流水保持原账户）'}：
           </div>
-        )}
+          <AccountSelect value={accountId} onChange={setAccountId} placeholder="请选择账户" />
+        </div>
       </Space>
     </Modal>
   );
