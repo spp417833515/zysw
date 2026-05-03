@@ -1,5 +1,5 @@
 {
-  "api": "http://10.0.0.176:20001",
+  "api": "http://10.0.0.176:20000",
   "projectId": "ZYSW",
   "key": "8wkhwf86",
   "user": "claude-rppm"
