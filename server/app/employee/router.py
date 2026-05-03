@@ -167,6 +167,7 @@ async def confirm_salary(
             db, body.employeeId, body.year, body.month,
             body.accountId, body.transferFee, voucher,
             manual_tax=body.manualTax, actual_paid=body.actualPaid,
+            self_tax_filing_override=body.selfTaxFiling,
         )
         return success(data)
     except ValueError as e:

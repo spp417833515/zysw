@@ -42,7 +42,7 @@ export function getUnpaidSalaries() {
   return request.get<ApiResponse<UnpaidSalaries>>('/employees/unpaid-salaries');
 }
 
-export function confirmSalary(data: { employeeId: string; year: number; month: number; accountId?: string; transferFee?: number; manualTax?: number; actualPaid?: number; voucher?: { id: string; name: string; url: string; type: string; size: number }[] }) {
+export function confirmSalary(data: { employeeId: string; year: number; month: number; accountId?: string; transferFee?: number; manualTax?: number; actualPaid?: number; selfTaxFiling?: boolean; voucher?: { id: string; name: string; url: string; type: string; size: number }[] }) {
   return request.post<ApiResponse<SalaryRecord>>('/employees/salary-records/confirm', data);
 }
 

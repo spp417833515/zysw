@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Modal, Form, Card, Switch, Space, message, Divider, Typography, InputNumber, Alert } from 'antd';
+import { Modal, Form, Card, Switch, Space, message, Divider, Typography, InputNumber, Checkbox } from 'antd';
 import { SwapOutlined } from '@ant-design/icons';
 import AccountSelect from '@/components/AccountSelect';
 import ImageUpload from '@/components/ImageUpload';
@@ -28,30 +28,31 @@ const SalaryConfirmModal: React.FC<SalaryConfirmModalProps> = ({
   const [loading, setLoading] = useState(false);
   const [includeFee, setIncludeFee] = useState(false);
 
+  // 本次是否按"员工自缴"处理（覆盖员工档案默认）
+  const [selfFiling, setSelfFiling] = useState<boolean>(false);
   // 手动填写的个税
   const [manualTax, setManualTax] = useState<number>(0);
   // 实际发放金额
   const [actualPaid, setActualPaid] = useState<number>(0);
 
   const baseSalary = item?.baseSalary ?? 0;
-  const isSelfFiling = !!item?.selfTaxFiling;
   // 自缴模式：netSalary 始终 = base，tax 仅作 memo（员工自缴，不从工资扣除）
   // 代扣模式：netSalary = base - tax
-  const netSalary = isSelfFiling ? baseSalary : baseSalary - manualTax;
+  const netSalary = selfFiling ? baseSalary : baseSalary - manualTax;
   // 差额 = 应发(税后) - 实付
   const difference = netSalary - actualPaid;
   // 合计支出（实付 + 可选手续费）
   const total = includeFee ? actualPaid + TRANSFER_FEE : actualPaid;
 
-  // 当 item 变化时，重置个税和实付
+  // 当 item 变化时，按员工默认值初始化
   useEffect(() => {
     if (item) {
-      if (item.selfTaxFiling) {
-        // 自缴税：默认税=0，全额发放
+      const sf = !!item.selfTaxFiling;
+      setSelfFiling(sf);
+      if (sf) {
         setManualTax(0);
         setActualPaid(item.baseSalary);
       } else {
-        // 代扣代缴：默认取系统预估值
         const estimatedTax = item.baseSalary - (item.netSalary ?? item.baseSalary);
         setManualTax(Math.max(0, Math.round(estimatedTax * 100) / 100));
         setActualPaid(item.netSalary ?? item.baseSalary);
@@ -59,13 +60,29 @@ const SalaryConfirmModal: React.FC<SalaryConfirmModalProps> = ({
     }
   }, [item]);
 
+  // 切换"自缴"勾选时，重置实付与个税：
+  //  自缴 → 实付 = base, tax = 0
+  //  代扣 → 按系统预估
+  const handleSelfFilingToggle = (checked: boolean) => {
+    setSelfFiling(checked);
+    if (!item) return;
+    if (checked) {
+      setManualTax(0);
+      setActualPaid(item.baseSalary);
+    } else {
+      const estimatedTax = item.baseSalary - (item.netSalary ?? item.baseSalary);
+      setManualTax(Math.max(0, Math.round(estimatedTax * 100) / 100));
+      setActualPaid(item.netSalary ?? item.baseSalary);
+    }
+  };
+
   // 当个税变化时：
   // - 代扣模式：tax 影响应发税后，自动同步实付为 base - tax
-  // - 自缴模式：tax 仅是 memo，不联动实付（用户照常发全额）
+  // - 自缴模式：tax 仅是 memo，不联动实付
   const handleTaxChange = (val: number | null) => {
     const tax = val ?? 0;
     setManualTax(tax);
-    if (!isSelfFiling) {
+    if (!selfFiling) {
       setActualPaid(Math.round((baseSalary - tax) * 100) / 100);
     }
   };
@@ -84,6 +101,7 @@ const SalaryConfirmModal: React.FC<SalaryConfirmModalProps> = ({
         transferFee: includeFee ? TRANSFER_FEE : 0,
         manualTax: manualTax,
         actualPaid: actualPaid,
+        selfTaxFiling: selfFiling,
         voucher: values.voucher || [],
       });
       if (res.code === 0) {
@@ -128,14 +146,20 @@ const SalaryConfirmModal: React.FC<SalaryConfirmModalProps> = ({
           </div>
 
           <Space direction="vertical" size={12} style={{ width: '100%' }}>
-            {isSelfFiling && (
-              <Alert
-                type="info"
-                showIcon
-                message="员工自行缴税"
-                description="公司全额发放工资到员工。个税字段仅作记账提醒，确认后会生成「应缴个税」待支出条目（员工从私户缴纳）。"
-              />
-            )}
+            {/* 自缴勾选（per-payment 覆盖员工档案默认） */}
+            <div style={{
+              padding: '10px 12px',
+              background: selfFiling ? '#e6f7ff' : '#fafafa',
+              borderRadius: 6,
+              border: `1px solid ${selfFiling ? '#91d5ff' : '#f0f0f0'}`,
+            }}>
+              <Checkbox checked={selfFiling} onChange={(e) => handleSelfFilingToggle(e.target.checked)}>
+                <Text strong>员工自行缴纳税费</Text>
+                <Text type="secondary" style={{ marginLeft: 8, fontSize: 12 }}>
+                  勾选后：公司全额发放，个税字段仅作参考不扣除
+                </Text>
+              </Checkbox>
+            </div>
 
             {/* 基本工资（固定） */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', background: '#fafafa', borderRadius: 6 }}>
@@ -145,7 +169,7 @@ const SalaryConfirmModal: React.FC<SalaryConfirmModalProps> = ({
 
             {/* 个税（可编辑） */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', background: '#fff7e6', borderRadius: 6, border: '1px solid #ffd591' }}>
-              <Text>{isSelfFiling ? '个人所得税（员工自缴）' : '个人所得税'}</Text>
+              <Text>{selfFiling ? '个人所得税（仅参考，员工自缴）' : '个人所得税'}</Text>
               <InputNumber
                 value={manualTax}
                 onChange={handleTaxChange}

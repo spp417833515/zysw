@@ -18,6 +18,7 @@ class SalaryConfirmRequest(BaseModel):
     transferFee: float = 0
     manualTax: Optional[float] = None      # 手动填写个税（不传则系统自动算）
     actualPaid: Optional[float] = None     # 实际发放金额（不传则等于税后应发）
+    selfTaxFiling: Optional[bool] = None   # 本次是否按"员工自缴"处理（覆盖员工默认设置）
     voucher: List[VoucherItem] = []
 
 

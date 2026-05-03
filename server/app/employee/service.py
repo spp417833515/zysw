@@ -9,7 +9,6 @@ from app.employee.models import Employee, SalaryRecord
 from app.employee.salary_domain import (
     SalaryCalculator, SalaryPeriod, TaxStrategy,
     make_salary_diff_marker, make_salary_diff_like_pattern,
-    make_salary_tax_marker,
 )
 from app.employee.schemas import EmployeeCreate, EmployeeUpdate
 
@@ -428,8 +427,11 @@ async def get_salary_records(db: AsyncSession, employee_id: Optional[str] = None
     return items
 
 
-async def confirm_salary(db: AsyncSession, employee_id: str, year: int, month: int, account_id: Optional[str] = None, transfer_fee: float = 0, voucher: Optional[list] = None, manual_tax: Optional[float] = None, actual_paid: Optional[float] = None) -> dict:
-    """确认工资发放：创建 SalaryRecord + 自动生成支出流水（金额=实际发放+可选手续费）"""
+async def confirm_salary(db: AsyncSession, employee_id: str, year: int, month: int, account_id: Optional[str] = None, transfer_fee: float = 0, voucher: Optional[list] = None, manual_tax: Optional[float] = None, actual_paid: Optional[float] = None, self_tax_filing_override: Optional[bool] = None) -> dict:
+    """确认工资发放：创建 SalaryRecord + 自动生成支出流水（金额=实际发放+可选手续费）。
+
+    self_tax_filing_override: 若传入则覆盖员工档案的自缴设置，仅作用于本次发放。
+    """
     from app.transaction.models import Transaction, Attachment
     from app.account.models import Account
 
@@ -456,7 +458,10 @@ async def confirm_salary(db: AsyncSession, employee_id: str, year: int, month: i
 
     monthly_salary = calc_monthly_salary(float(e.base_salary), e.entry_date, year, month, e.pay_day)
 
-    if e.self_tax_filing:
+    # 是否本次按自缴模式：优先用本次传入的 override，否则用员工档案默认
+    is_self_filing = self_tax_filing_override if self_tax_filing_override is not None else bool(e.self_tax_filing)
+
+    if is_self_filing:
         # 自缴模式：tax 仅作 memo（员工自缴），net_salary 始终 = base，不影响应发金额
         tax = round(manual_tax, 2) if manual_tax is not None else 0.0
         net_salary = monthly_salary
@@ -555,24 +560,6 @@ async def confirm_salary(db: AsyncSession, employee_id: str, year: int, month: i
             invoice_needed=False,
         )
         db.add(diff_txn)
-
-    # 自缴模式 + 用户填写了非零个税 → 创建应缴个税 memo 待支出
-    # 用户场景：发放全额工资给员工，员工自行从私户缴税。系统记录这笔应缴款以免遗忘。
-    if e.self_tax_filing and tax > 0:
-        tax_marker = make_salary_tax_marker(record_id)
-        tax_memo_txn = Transaction(
-            id=str(uuid.uuid4()),
-            type="expense",
-            amount=round(tax, 2),
-            date=pay_date,
-            category_id="25ad1b78-e213-42f3-9d39-3db46e117208",
-            account_id="",
-            description=f"{tax_marker} 员工自缴个税 - {e.name} - {year}年{month}月",
-            tags="[]",
-            payment_confirmed=False,
-            invoice_needed=False,
-        )
-        db.add(tax_memo_txn)
 
     await db.commit()
     await db.refresh(record)
