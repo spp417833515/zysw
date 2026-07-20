@@ -1,5 +1,5 @@
-# ---- 阶段一：构建前端 ----
-FROM node:22-alpine AS web
+# ---- 阶段一：构建前端（跨架构时在本机原生跑，产物与架构无关） ----
+FROM --platform=$BUILDPLATFORM node:22-alpine AS web
 WORKDIR /build
 COPY package.json package-lock.json ./
 RUN npm ci
@@ -22,6 +22,7 @@ COPY --from=web /build/dist /app/dist
 
 # 数据（数据库/附件/备份）统一放 /data，用 volume 挂载持久化
 ENV DATA_DIR=/data
+ENV TZ=Asia/Shanghai
 
 EXPOSE 39721
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
