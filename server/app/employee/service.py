@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.employee.models import Employee, SalaryRecord
 from app.employee.salary_domain import (
     SalaryCalculator, SalaryPeriod, TaxStrategy,
-    make_salary_diff_marker, make_salary_diff_like_pattern,
+    make_salary_diff_marker,
 )
 from app.employee.schemas import EmployeeCreate, EmployeeUpdate
 
@@ -153,8 +153,14 @@ def calc_tax_cumulative(
     }
 
 
-async def _get_cumulative_data(db: AsyncSession, employee_id: str, year: int, before_month: int) -> dict:
-    """获取某员工当年某月之前的累计数据（从已发放的SalaryRecord中汇总）"""
+async def _get_cumulative_data(db: AsyncSession, employee_id: str, year: int, before_month: int,
+                               social_rate: float = 0, fund_rate: float = 0) -> dict:
+    """获取某员工当年某月之前的累计数据（从已发放的SalaryRecord中汇总）。
+
+    prev_cumulative_tax 必须是「公司实际预扣」的税：自缴税月份 tax 字段只是 memo
+    （员工自己缴，公司全额发 net=base），直接 sum(tax) 会把没预扣的税当成已预扣，
+    导致员工切回代扣模式时当月少扣。故按 base − 社保公积金 − net 反推实际预扣额。
+    """
     result = await db.execute(
         select(SalaryRecord).where(
             and_(
@@ -166,8 +172,13 @@ async def _get_cumulative_data(db: AsyncSession, employee_id: str, year: int, be
     )
     records = result.scalars().all()
 
-    cumulative_income = sum(float(r.base_salary) for r in records)
-    cumulative_tax = sum(float(r.tax) for r in records)
+    cumulative_income = 0.0
+    cumulative_tax = 0.0
+    for r in records:
+        base = float(r.base_salary)
+        deduction = base * (social_rate + fund_rate) / 100
+        cumulative_income += base
+        cumulative_tax += max(round(base - deduction - float(r.net_salary), 2), 0)
     month_count = len(records)
 
     # 社保公积金和专项附加扣除需要从员工信息重新计算（SalaryRecord中未存储）
@@ -196,7 +207,7 @@ async def _compute_tax_for(e: Employee, db: AsyncSession, year: int, month: int,
     social_rate = float(e.social_insurance_rate)
     fund_rate = float(e.housing_fund_rate)
     special_ded = float(e.special_deduction)
-    cumulative = await _get_cumulative_data(db, e.id, year, month)
+    cumulative = await _get_cumulative_data(db, e.id, year, month, social_rate, fund_rate)
     prev_months = cumulative["month_count"]
     prev_records = (await db.execute(
         select(SalaryRecord).where(
@@ -309,6 +320,12 @@ async def delete_employee(db: AsyncSession, eid: str) -> bool:
     e = await db.get(Employee, eid)
     if not e:
         return False
+    # 有工资发放记录的员工是财务凭据的一部分，禁止物理删除（请改为离职状态）
+    linked = await db.execute(
+        select(SalaryRecord.id).where(SalaryRecord.employee_id == eid).limit(1)
+    )
+    if linked.first():
+        raise ValueError("该员工已有工资发放记录，不能删除；请将其状态改为「离职」")
     await db.delete(e)
     await db.commit()
     return True
@@ -388,9 +405,7 @@ async def get_pay_reminders(db: AsyncSession) -> List[dict]:
 
 
 async def get_salary_records(db: AsyncSession, employee_id: Optional[str] = None, year: Optional[int] = None) -> List[dict]:
-    """获取工资发放记录（含实际支付金额和差额）"""
-    from app.transaction.models import Transaction
-
+    """获取工资发放记录（含实际支付金额和差额，口径与差额看板一致）"""
     query = select(SalaryRecord)
     if employee_id:
         query = query.where(SalaryRecord.employee_id == employee_id)
@@ -403,12 +418,9 @@ async def get_salary_records(db: AsyncSession, employee_id: Optional[str] = None
     items = []
     for r in records:
         net = float(r.net_salary)
-        actual_paid = net  # 默认等于应发
-        if r.transaction_id:
-            txn = await db.get(Transaction, r.transaction_id)
-            if txn:
-                actual_paid = float(txn.amount)
-        difference = round(net - actual_paid, 2)
+        settlement = await compute_salary_settlement(db, r)
+        actual_paid = settlement["confirmed_total"]
+        difference = settlement["diff"]
         items.append({
             "id": r.id,
             "employeeId": r.employee_id,
@@ -420,7 +432,8 @@ async def get_salary_records(db: AsyncSession, employee_id: Optional[str] = None
             "netSalary": net,
             "actualPaid": actual_paid,
             "difference": difference,
-            "status": r.status,
+            # 记录存在即已确认（status 死列已删除，保留输出以维持前端契约）
+            "status": "confirmed",
             "transactionId": r.transaction_id,
             "confirmedAt": r.confirmed_at,
         })
@@ -448,13 +461,14 @@ async def confirm_salary(db: AsyncSession, employee_id: str, year: int, month: i
     if not e:
         raise ValueError("员工不存在")
 
-    # 验证账户（如有）
-    if account_id:
-        account = await db.get(Account, account_id)
-        if not account:
-            raise ValueError("发放账户不存在")
-    else:
-        account = None
+    # 发放必须落到真实账户（否则流水已确认但余额不动，账实分离）
+    if not account_id:
+        raise ValueError("必须选择发放账户")
+    account = await db.get(Account, account_id)
+    if not account:
+        raise ValueError("发放账户不存在")
+
+    from app.transaction.service import create_confirmed_transaction
 
     monthly_salary = calc_monthly_salary(float(e.base_salary), e.entry_date, year, month, e.pay_day)
 
@@ -475,41 +489,36 @@ async def confirm_salary(db: AsyncSession, employee_id: str, year: int, month: i
 
     # 实际发放金额（手动指定或默认等于税后应发）
     paid_amount = round(actual_paid, 2) if actual_paid is not None else net_salary
-    from decimal import Decimal
-    total_deduct = Decimal(str(round(paid_amount + transfer_fee, 2)))
+    total_disbursed = round(paid_amount + transfer_fee, 2)
     now = datetime.now(timezone.utc).isoformat()
 
     # 发薪日期：M月工资在 (M+1)月 pay_day 日发放（由 SalaryPeriod 处理跨年/小月）
     pay_date = SalaryPeriod(year, month, e.pay_day).due_date.isoformat()
 
-    def _make_txn(amount: float, category_id: str, description: str) -> Transaction:
-        return Transaction(
-            id=str(uuid.uuid4()),
-            type="expense",
-            amount=amount,
-            date=pay_date,
-            category_id=category_id,
-            account_id=account_id or "",
-            description=description,
-            tags="[]",
-            payment_confirmed=True,
-            payment_account_type="company",
-            payment_confirmed_at=now,
-            invoice_needed=False,
-        )
-
-    # 工资流水（实际发放金额）
-    txn = _make_txn(paid_amount, "25ad1b78-e213-42f3-9d39-3db46e117208", f"工资发放 - {e.name} - {year}年{month}月")
-    db.add(txn)
+    # 工资流水（实际发放金额）：落流水 + 扣余额统一走 transaction 模块唯一入口
+    txn = await create_confirmed_transaction(
+        db,
+        txn_type="expense",
+        amount=paid_amount,
+        date=pay_date,
+        category_id="25ad1b78-e213-42f3-9d39-3db46e117208",
+        account_id=account_id,
+        description=f"工资发放 - {e.name} - {year}年{month}月",
+        confirmed_at=now,
+    )
 
     # 手续费单独一笔流水
     if transfer_fee > 0:
-        fee_txn = _make_txn(transfer_fee, "cat_e2", f"工资发放手续费 - {e.name} - {year}年{month}月")
-        db.add(fee_txn)
-
-    # 更新账户余额
-    if account:
-        account.balance -= total_deduct
+        await create_confirmed_transaction(
+            db,
+            txn_type="expense",
+            amount=transfer_fee,
+            date=pay_date,
+            category_id="cat_e2",
+            account_id=account_id,
+            description=f"工资发放手续费 - {e.name} - {year}年{month}月",
+            confirmed_at=now,
+        )
 
     # 保存凭证附件
     if voucher:
@@ -549,7 +558,8 @@ async def confirm_salary(db: AsyncSession, employee_id: str, year: int, month: i
             amount=abs(diff_amount),
             date=pay_date,
             category_id="25ad1b78-e213-42f3-9d39-3db46e117208",
-            account_id="",  # 留空，由合并付款/确认到账时指定
+            account_id=None,  # 留空，由合并付款/确认到账时指定
+            salary_record_id=record_id,  # 结构化关联，描述标记仅作展示
             description=(
                 f"{marker} 工资补发 - {e.name} - {year}年{month}月"
                 if diff_is_underpaid else
@@ -576,10 +586,39 @@ async def confirm_salary(db: AsyncSession, employee_id: str, year: int, month: i
         "actualPaid": paid_amount,
         "difference": difference,
         "transferFee": transfer_fee,
-        "disbursement": float(total_deduct),
-        "status": record.status,
+        "disbursement": total_disbursed,
+        "status": "confirmed",
         "transactionId": record.transaction_id,
         "confirmedAt": record.confirmed_at,
+    }
+
+
+async def compute_salary_settlement(db: AsyncSession, record: SalaryRecord) -> dict:
+    """工资实付对账的唯一口径（全系统共用，禁止各处自行重算）：
+    confirmed_total = 已确认主流水 + Σ已确认差额流水（补发计增 / 回收计减）
+    diff = 应发净额 − confirmed_total
+    差额流水按结构化关联列 salary_record_id 定位（不再解析描述文本）。
+    """
+    from app.transaction.models import Transaction
+
+    confirmed_total = 0.0
+    if record.transaction_id:
+        main_txn = await db.get(Transaction, record.transaction_id)
+        if main_txn and main_txn.payment_confirmed:
+            confirmed_total += float(main_txn.amount)
+    linked = (await db.execute(
+        select(Transaction).where(Transaction.salary_record_id == record.id)
+    )).scalars().all()
+    pending = []
+    for t in linked:
+        if t.payment_confirmed:
+            confirmed_total += float(t.amount) if t.type == "expense" else -float(t.amount)
+        else:
+            pending.append(t)
+    return {
+        "confirmed_total": round(confirmed_total, 2),
+        "diff": round(float(record.net_salary) - confirmed_total, 2),
+        "pending_diffs": pending,
     }
 
 
@@ -595,30 +634,22 @@ async def generate_salary_settlement(db: AsyncSession, record_id: str) -> dict:
     if not record:
         raise ValueError("发放记录不存在")
 
-    # 计算当前差额（同 get_salary_differences 逻辑）
-    confirmed_total = 0.0
-    if record.transaction_id:
-        main_txn = await db.get(Transaction, record.transaction_id)
-        if main_txn and main_txn.payment_confirmed:
-            confirmed_total += float(main_txn.amount)
-    pattern = make_salary_diff_like_pattern(record.id)
-    linked = (await db.execute(
-        select(Transaction).where(Transaction.description.like(pattern))
-    )).scalars().all()
-    pending = [t for t in linked if not t.payment_confirmed]
-    for t in linked:
-        if t.payment_confirmed:
-            if t.type == "expense":
-                confirmed_total += float(t.amount)
-            elif t.type == "income":
-                confirmed_total -= float(t.amount)
-
-    diff = round(float(record.net_salary) - confirmed_total, 2)
+    settlement = await compute_salary_settlement(db, record)
+    pending = settlement["pending_diffs"]
+    diff = settlement["diff"]
     if diff == 0:
         raise ValueError("当前无差额，无需生成流水")
     if pending:
-        # 已有待处理流水，幂等返回
+        # 已有待处理流水：金额/方向若与当前差额不符（改税/改实付后过期）则先同步再返回
         t = pending[0]
+        for extra in pending[1:]:
+            await db.delete(extra)
+        expected_type = "expense" if diff > 0 else "income"
+        if float(t.amount) != abs(diff) or t.type != expected_type:
+            t.type = expected_type
+            t.amount = abs(diff)
+            t.updated_at = datetime.now(timezone.utc).isoformat()
+        await db.commit()
         return {
             "transactionId": t.id, "type": t.type, "amount": float(t.amount),
             "alreadyExists": True,
@@ -634,7 +665,8 @@ async def generate_salary_settlement(db: AsyncSession, record_id: str) -> dict:
         amount=abs(diff),
         date=pay_date,
         category_id="25ad1b78-e213-42f3-9d39-3db46e117208",
-        account_id="",
+        account_id=None,
+        salary_record_id=record.id,
         description=(
             f"{marker} 工资补发 - {record.employee_name} - {record.year}年{record.month}月"
             if is_underpaid else
@@ -704,31 +736,79 @@ async def get_unpaid_salaries(db: AsyncSession) -> dict:
 
 
 async def update_salary_record(db: AsyncSession, record_id: str, data) -> Optional[dict]:
-    """修改发放记录：可更新个税和实际发放金额"""
+    """修改发放记录：可更新个税和实际发放金额。
+
+    - 重算 net 时区分记录模式：自缴税记录 net 恒等于 base（tax 仅 memo）；
+      代扣记录 net = base − 社保公积金 − tax
+    - 调整余额仅当主流水「已确认且非私户」（与流水模块口径一致）
+    - 修改后同步未确认的 [SR:] 差额流水（金额过期即修正/归零即删除/缺失即补建）
+    """
     record = await db.get(SalaryRecord, record_id)
     if not record:
         return None
 
     from app.transaction.models import Transaction
-    from app.account.models import Account
-    from decimal import Decimal
 
-    # 更新个税 → 重算税后应发
+    e = await db.get(Employee, record.employee_id)
+
+    # 更新个税 → 重算税后应发（按记录自身的发放模式）
     if data.tax is not None:
+        base = float(record.base_salary)
+        net = float(record.net_salary)
+        if net < base - 0.005:
+            record_is_self_pay = False   # 发生过扣款 → 代扣模式
+        elif float(record.tax or 0) > 0:
+            record_is_self_pay = True    # 全额发放且带税 memo → 自缴模式
+        else:
+            record_is_self_pay = bool(e.self_tax_filing) if e else False
         record.tax = data.tax
-        record.net_salary = round(float(record.base_salary) - data.tax, 2)
+        if not record_is_self_pay:
+            rates = ((float(e.social_insurance_rate) + float(e.housing_fund_rate)) / 100) if e else 0.0
+            record.net_salary = round(base - base * rates - data.tax, 2)
+        # 自缴模式：net 恒 = base，税只是 memo，不重算
 
-    # 更新实际发放金额 → 改关联流水 + 调账户余额
+    # 更新实际发放金额 → 改流水金额 + 同步余额，统一走 transaction 模块唯一入口
     if data.actualPaid is not None and record.transaction_id:
         txn = await db.get(Transaction, record.transaction_id)
         if txn:
-            if txn.account_id:
-                account = await db.get(Account, txn.account_id)
-                if account:
-                    old_amount = Decimal(str(float(txn.amount)))
-                    new_amount = Decimal(str(data.actualPaid))
-                    account.balance += old_amount - new_amount
-            txn.amount = data.actualPaid
+            from app.transaction.service import adjust_transaction_amount
+            await adjust_transaction_amount(db, txn, data.actualPaid)
+
+    # 同步未确认的差额流水：改税/改实付后旧差额金额已过期（对账口径统一走 compute_salary_settlement）
+    settlement = await compute_salary_settlement(db, record)
+    pending_diffs = settlement["pending_diffs"]
+    remaining = settlement["diff"]
+    now = datetime.now(timezone.utc).isoformat()
+    if pending_diffs:
+        keep = pending_diffs[0]
+        for extra in pending_diffs[1:]:
+            await db.delete(extra)
+        if remaining == 0:
+            await db.delete(keep)
+        else:
+            keep.type = "expense" if remaining > 0 else "income"
+            keep.amount = abs(remaining)
+            keep.updated_at = now
+    elif remaining != 0:
+        marker = make_salary_diff_marker(record.id)
+        db.add(Transaction(
+            id=str(uuid.uuid4()),
+            type="expense" if remaining > 0 else "income",
+            amount=abs(remaining),
+            date=SalaryPeriod(record.year, record.month,
+                              int(e.pay_day) if e else 1).due_date.isoformat(),
+            category_id="25ad1b78-e213-42f3-9d39-3db46e117208",
+            account_id=None,
+            salary_record_id=record.id,
+            description=(
+                f"{marker} 工资补发 - {record.employee_name} - {record.year}年{record.month}月"
+                if remaining > 0 else
+                f"{marker} 工资多发回收 - {record.employee_name} - {record.year}年{record.month}月"
+            ),
+            tags="[]",
+            payment_confirmed=False,
+            invoice_needed=False,
+        ))
 
     await db.commit()
     await db.refresh(record)
@@ -763,40 +843,17 @@ async def get_salary_differences(db: AsyncSession) -> list:
     差额流水未确认时，差额仍存在（在 待支出/待到账 中等待处理）；
     差额流水被合并付款确认后，actualPaid 自动变为 netSalary，差额消失。
     """
-    from app.transaction.models import Transaction
-
     records = (await db.execute(select(SalaryRecord))).scalars().all()
     result = []
     for r in records:
-        # 主流水（如有）
-        confirmed_total = 0.0
-        if r.transaction_id:
-            main_txn = await db.get(Transaction, r.transaction_id)
-            if main_txn and main_txn.payment_confirmed:
-                confirmed_total += float(main_txn.amount)
-
-        # 差额关联流水：通过描述前缀稳定标记定位
-        pattern = make_salary_diff_like_pattern(r.id)
-        linked = (await db.execute(
-            select(Transaction).where(Transaction.description.like(pattern))
-        )).scalars().all()
-        pending_settlement = []  # 未确认的差额流水
-        for t in linked:
-            if t.payment_confirmed:
-                # 多发回收（income）已收 → 抵减；补发（expense）已付 → 增加 actualPaid
-                if t.type == "expense":
-                    confirmed_total += float(t.amount)
-                elif t.type == "income":
-                    confirmed_total -= float(t.amount)
-            else:
-                pending_settlement.append({
-                    "transactionId": t.id,
-                    "type": t.type,
-                    "amount": float(t.amount),
-                })
-
+        settlement = await compute_salary_settlement(db, r)
+        confirmed_total = settlement["confirmed_total"]
+        diff = settlement["diff"]
+        pending_settlement = [
+            {"transactionId": t.id, "type": t.type, "amount": float(t.amount)}
+            for t in settlement["pending_diffs"]
+        ]
         net = float(r.net_salary)
-        diff = round(net - confirmed_total, 2)
         if diff != 0:
             result.append({
                 "id": r.id,

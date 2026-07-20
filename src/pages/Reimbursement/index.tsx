@@ -26,8 +26,8 @@ const ReimbursementPage: React.FC = () => {
     try {
       await deleteBatch(id);
       message.success('已删除');
-    } catch {
-      message.error('删除失败');
+    } catch (e) {
+      message.error(e instanceof Error ? e.message : '删除失败');
     }
   };
 
@@ -41,8 +41,8 @@ const ReimbursementPage: React.FC = () => {
       message.success('已确认打款，支出流水已生成');
       setPayingBatch(null);
       payForm.resetFields();
-    } catch {
-      message.error('操作失败');
+    } catch (e) {
+      message.error(e instanceof Error ? e.message : '操作失败');
     } finally {
       setPaySubmitting(false);
     }
@@ -136,8 +136,12 @@ const ReimbursementPage: React.FC = () => {
           </div>
         )}
         <Form form={payForm} layout="vertical">
-          <Form.Item name="accountId" label="打款账户">
-            <AccountSelect placeholder="请选择打款账户（可选）" style={{ width: '100%' }} />
+          <Form.Item
+            name="accountId"
+            label="打款账户"
+            rules={[{ required: true, message: '打款必须选择账户' }]}
+          >
+            <AccountSelect placeholder="请选择打款账户" style={{ width: '100%' }} />
           </Form.Item>
         </Form>
       </Modal>

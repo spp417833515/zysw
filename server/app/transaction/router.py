@@ -36,6 +36,13 @@ async def pending_taxes(db: AsyncSession = Depends(get_db)):
     return success(items)
 
 
+@router.get("/pending/reimbursable")
+async def pending_reimbursable(db: AsyncSession = Depends(get_db)):
+    """全部可入报销批次的流水（私户垫付支出、未关联批次），供创建报销单用"""
+    items = await service.get_reimbursable_transactions(db)
+    return success(items)
+
+
 @router.post("/batch")
 async def batch_create(data: BatchTransactionCreate, db: AsyncSession = Depends(get_db)):
     result = await service.batch_create_transactions(db, data.items)
@@ -99,7 +106,10 @@ async def get_transaction(txn_id: str, db: AsyncSession = Depends(get_db)):
 
 @router.post("")
 async def create_transaction(data: TransactionCreate, db: AsyncSession = Depends(get_db)):
-    txn = await service.create_transaction(db, data)
+    try:
+        txn = await service.create_transaction(db, data)
+    except ValueError as e:
+        return error(str(e))
     return success(txn)
 
 
@@ -107,7 +117,10 @@ async def create_transaction(data: TransactionCreate, db: AsyncSession = Depends
 async def update_transaction(
     txn_id: str, data: TransactionUpdate, db: AsyncSession = Depends(get_db)
 ):
-    txn = await service.update_transaction(db, txn_id, data)
+    try:
+        txn = await service.update_transaction(db, txn_id, data)
+    except ValueError as e:
+        return error(str(e))
     if not txn:
         return error("Transaction not found", code=404)
     return success(txn)
@@ -115,7 +128,10 @@ async def update_transaction(
 
 @router.delete("/{txn_id}")
 async def delete_transaction(txn_id: str, db: AsyncSession = Depends(get_db)):
-    deleted = await service.delete_transaction(db, txn_id)
+    try:
+        deleted = await service.delete_transaction(db, txn_id)
+    except ValueError as e:
+        return error(str(e))
     if not deleted:
         return error("Transaction not found", code=404)
     return success(None)

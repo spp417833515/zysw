@@ -23,8 +23,8 @@ export function deleteTransaction(id: string) {
 }
 
 // Workflow endpoints
-export function confirmPayment(id: string, accountType: string) {
-  return request.post<ApiResponse<Transaction>>(`/transactions/${id}/confirm-payment`, { accountType });
+export function confirmPayment(id: string, accountType: string, accountId?: string) {
+  return request.post<ApiResponse<Transaction>>(`/transactions/${id}/confirm-payment`, { accountType, accountId });
 }
 
 export function confirmInvoice(id: string, invoiceId?: string) {
@@ -49,6 +49,11 @@ export function getPendingInvoices() {
 
 export function getPendingTaxes() {
   return request.get<ApiResponse<Transaction[]>>('/transactions/pending/taxes');
+}
+
+/** 全部可入报销批次的流水（私户垫付、未关联批次），全量不分页 */
+export function getReimbursableTransactions() {
+  return request.get<ApiResponse<Transaction[]>>('/transactions/pending/reimbursable');
 }
 
 export function batchCreateTransactions(items: Partial<Transaction>[]) {

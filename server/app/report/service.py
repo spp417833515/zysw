@@ -6,6 +6,11 @@ from app.account.models import Account
 from app.category.models import Category
 from app.contact.models import Contact
 from app.transaction.models import Transaction
+from app.transaction.service import (
+    business_expense_conditions,
+    company_cash_conditions,
+    exclude_reimburse_payout_condition,
+)
 
 
 async def _batch_category_names(db: AsyncSession, cat_ids: set) -> dict:
@@ -39,10 +44,10 @@ async def get_profit_loss(db: AsyncSession, start_date: str, end_date: str) -> d
     )
     total_income = float(inc_result.scalar() or 0)
 
-    # Total expense
+    # Total expense（统一费用口径：排除 [RB:] 报销打款，防止与垫付原始流水双计）
     exp_result = await db.execute(
         select(func.coalesce(func.sum(Transaction.amount), 0.0))
-        .where(and_(date_filter, Transaction.type == "expense"))
+        .where(and_(date_filter, *business_expense_conditions()))
     )
     total_expense = float(exp_result.scalar() or 0)
 
@@ -54,10 +59,10 @@ async def get_profit_loss(db: AsyncSession, start_date: str, end_date: str) -> d
     )
     inc_rows = inc_by_cat.all()
 
-    # Expense by category
+    # Expense by category（同上统一费用口径）
     exp_by_cat = await db.execute(
         select(Transaction.category_id, func.sum(Transaction.amount).label("total"))
-        .where(and_(date_filter, Transaction.type == "expense"))
+        .where(and_(date_filter, *business_expense_conditions()))
         .group_by(Transaction.category_id)
     )
     exp_rows = exp_by_cat.all()
@@ -94,7 +99,10 @@ async def get_profit_loss(db: AsyncSession, start_date: str, end_date: str) -> d
 
 
 async def get_cash_flow(db: AsyncSession, start_date: str, end_date: str) -> dict:
-    date_filter = and_(Transaction.date >= start_date, Transaction.date <= end_date)
+    """现金流量（公司现金口径，与税务报表一致）：
+    仅计已确认收付且非私户垫付的流水；[RB:] 报销打款是真实出款，计入。"""
+    date_filter = and_(Transaction.date >= start_date, Transaction.date <= end_date,
+                       *company_cash_conditions())
 
     # Inflow (income)
     inflow_result = await db.execute(
@@ -167,7 +175,9 @@ async def get_cash_flow(db: AsyncSession, start_date: str, end_date: str) -> dic
 
 async def get_category_report(db: AsyncSession, start_date: str, end_date: str, type_filter: Optional[str] = None) -> dict:
     date_filter = and_(Transaction.date >= start_date, Transaction.date <= end_date)
-    conditions = [date_filter]
+    # [RB:] 打款统一排除：其费用已按垫付原始流水的真实分类计入，
+    # 保留会让"垫付"分类双计
+    conditions = [date_filter, exclude_reimburse_payout_condition()]
     if type_filter:
         conditions.append(Transaction.type == type_filter)
 
@@ -208,7 +218,9 @@ async def get_category_report(db: AsyncSession, start_date: str, end_date: str, 
 
 
 async def get_trend_report(db: AsyncSession, start_date: str, end_date: str) -> dict:
-    date_filter = and_(Transaction.date >= start_date, Transaction.date <= end_date)
+    # 统一费用口径：排除 [RB:] 报销打款，防止支出双计
+    date_filter = and_(Transaction.date >= start_date, Transaction.date <= end_date,
+                       exclude_reimburse_payout_condition())
 
     result = await db.execute(
         select(

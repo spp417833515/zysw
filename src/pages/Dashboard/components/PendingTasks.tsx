@@ -98,7 +98,8 @@ const PendingTasks: React.FC = () => {
       icon: <WarningOutlined style={{ fontSize: 20, color: '#faad14' }} />,
       label: salaryDiffCount > 0 ? `工资差额 ¥${formatAmount(salaryDiffAmount)}` : '工资差额',
       count: salaryDiffCount,
-      tab: 'salary-diff',
+      // 差额以 [SR:] 待处理流水形式出现在「待支出」（salary-diff tab 已下线）
+      tab: 'expense-payment',
     },
     {
       key: 'collection',

@@ -17,6 +17,7 @@ import {
   getPendingTaxes,
 } from '@/api/transaction';
 import type { BatchConfirmPaymentResult } from '@/api/transaction';
+import { ensureOk } from '@/api/request';
 import { useAccountStore } from '@/store/useAccountStore';
 
 interface TransactionState {
@@ -41,7 +42,7 @@ interface TransactionState {
   fetchPendingData: () => Promise<void>;
 
   // Workflow actions
-  confirmPayment: (id: string, accountType: PaymentAccountType) => Promise<void>;
+  confirmPayment: (id: string, accountType: PaymentAccountType, accountId?: string) => Promise<void>;
   confirmInvoice: (id: string, invoiceId?: string) => Promise<void>;
   skipInvoice: (id: string) => Promise<void>;
   confirmTaxDeclare: (id: string, taxPeriod: string) => Promise<void>;
@@ -118,19 +119,16 @@ export const useTransactionStore = create<TransactionState>((set, get) => ({
 
   addTransaction: async (t) => {
     const res = await createTransaction(t as Partial<Transaction>);
-    if (res.code === 0) {
-      useAccountStore.getState().fetchAccounts();
-      get().fetchTransactions();
-      get().fetchPendingData();
-    }
+    ensureOk(res, '创建交易失败');
+    useAccountStore.getState().fetchAccounts();
+    get().fetchTransactions();
+    get().fetchPendingData();
     return res.data;
   },
 
   updateTransaction: async (id, updates) => {
     const res = await apiUpdateTransaction(id, updates);
-    if (res.code !== 0) {
-      throw new Error(res.message || '更新失败');
-    }
+    ensureOk(res, '更新失败');
     set((s) => ({
       transactions: s.transactions.map((t) => (t.id === id ? res.data : t)),
     }));
@@ -139,70 +137,62 @@ export const useTransactionStore = create<TransactionState>((set, get) => ({
 
   deleteTransaction: async (id) => {
     const res = await apiDeleteTransaction(id);
-    if (res.code === 0) {
-      useAccountStore.getState().fetchAccounts();
-      get().fetchTransactions();
-      get().fetchPendingData();
-    }
+    ensureOk(res, '删除失败');
+    useAccountStore.getState().fetchAccounts();
+    get().fetchTransactions();
+    get().fetchPendingData();
   },
 
-  confirmPayment: async (id, accountType) => {
-    const res = await apiConfirmPayment(id, accountType);
-    if (res.code === 0) {
-      set((s) => ({
-        transactions: s.transactions.map((t) => (t.id === id ? res.data : t)),
-      }));
-      get().fetchPendingData();
-    }
+  confirmPayment: async (id, accountType, accountId) => {
+    const res = await apiConfirmPayment(id, accountType, accountId);
+    ensureOk(res, '确认失败');
+    set((s) => ({
+      transactions: s.transactions.map((t) => (t.id === id ? res.data : t)),
+    }));
+    useAccountStore.getState().fetchAccounts();
+    get().fetchPendingData();
   },
 
   confirmInvoice: async (id, invoiceId) => {
     const res = await apiConfirmInvoice(id, invoiceId);
-    if (res.code === 0) {
-      set((s) => ({
-        transactions: s.transactions.map((t) => (t.id === id ? res.data : t)),
-      }));
-      get().fetchPendingData();
-    }
+    ensureOk(res, '开票确认失败');
+    set((s) => ({
+      transactions: s.transactions.map((t) => (t.id === id ? res.data : t)),
+    }));
+    get().fetchPendingData();
   },
 
   skipInvoice: async (id) => {
     const res = await apiSkipInvoice(id);
-    if (res.code === 0) {
-      set((s) => ({
-        transactions: s.transactions.map((t) => (t.id === id ? res.data : t)),
-      }));
-      get().fetchPendingData();
-    }
+    ensureOk(res, '标记无需开票失败');
+    set((s) => ({
+      transactions: s.transactions.map((t) => (t.id === id ? res.data : t)),
+    }));
+    get().fetchPendingData();
   },
 
   confirmTaxDeclare: async (id, taxPeriod) => {
     const res = await apiConfirmTax(id, taxPeriod);
-    if (res.code === 0) {
-      set((s) => ({
-        transactions: s.transactions.map((t) => (t.id === id ? res.data : t)),
-      }));
-      get().fetchPendingData();
-    }
+    ensureOk(res, '申报确认失败');
+    set((s) => ({
+      transactions: s.transactions.map((t) => (t.id === id ? res.data : t)),
+    }));
+    get().fetchPendingData();
   },
 
   batchConfirmTaxDeclare: async (taxPeriod) => {
     const res = await apiBatchConfirmTax(taxPeriod);
-    if (res.code === 0) {
-      get().fetchPendingData();
-      return res.data;
-    }
-    throw new Error('批量申报失败');
+    ensureOk(res, '批量申报失败');
+    get().fetchPendingData();
+    return res.data;
   },
 
   batchConfirmPayment: async (ids, accountType, accountId) => {
     const res = await apiBatchConfirmPayment(ids, accountType, accountId);
-    if (res.code === 0) {
-      useAccountStore.getState().fetchAccounts();
-      get().fetchPendingData();
-      return res.data;
-    }
-    throw new Error('合并付款失败');
+    ensureOk(res, '合并付款失败');
+    useAccountStore.getState().fetchAccounts();
+    get().fetchPendingData();
+    return res.data;
   },
 }));
 

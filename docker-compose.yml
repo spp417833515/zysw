@@ -1,0 +1,10 @@
+services:
+  zysw:
+    build: .
+    container_name: zysw-finance
+    ports:
+      - "39721:39721"
+    volumes:
+      # 数据库、附件、备份都在这一个目录里，备份/迁移只需拷走它
+      - ./zysw-data:/data
+    restart: unless-stopped

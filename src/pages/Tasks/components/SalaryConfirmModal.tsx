@@ -252,8 +252,12 @@ const SalaryConfirmModal: React.FC<SalaryConfirmModalProps> = ({
       )}
 
       <Form form={form} layout="vertical">
-        <Form.Item name="accountId" label="发放账户">
-          <AccountSelect placeholder="请选择发放账户（可选）" style={{ width: '100%' }} />
+        <Form.Item
+          name="accountId"
+          label="发放账户"
+          rules={[{ required: true, message: '必须选择发放账户' }]}
+        >
+          <AccountSelect placeholder="请选择发放账户" style={{ width: '100%' }} />
         </Form.Item>
         <Form.Item name="voucher" label="转账凭证截图">
           <ImageUpload maxCount={3} accept="image/*,.pdf" label="上传凭证" />

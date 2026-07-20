@@ -1,0 +1,228 @@
+{
+  "version": "1.0.0",
+  "lastScanned": 1781494619312,
+  "projectRoot": "/Users/admin/Desktop/zysw",
+  "techStack": {
+    "languages": [
+      {
+        "name": "JavaScript/TypeScript",
+        "version": null,
+        "confidence": "high",
+        "markers": [
+          "package.json"
+        ]
+      },
+      {
+        "name": "TypeScript",
+        "version": null,
+        "confidence": "high",
+        "markers": [
+          "tsconfig.json"
+        ]
+      }
+    ],
+    "frameworks": [
+      {
+        "name": "react",
+        "version": "18.3.1",
+        "category": "frontend"
+      },
+      {
+        "name": "react-dom",
+        "version": "18.3.1",
+        "category": "frontend"
+      },
+      {
+        "name": "vite",
+        "version": "6.0.0",
+        "category": "build"
+      }
+    ],
+    "packageManager": "npm",
+    "runtime": null
+  },
+  "build": {
+    "buildCommand": "npm run build",
+    "testCommand": null,
+    "lintCommand": null,
+    "devCommand": "npm run dev",
+    "scripts": {
+      "dev": "vite",
+      "build": "tsc -b && vite build",
+      "preview": "vite preview",
+      "mock": "json-server --watch src/mock/db.json --port 3001"
+    }
+  },
+  "conventions": {
+    "namingStyle": null,
+    "importStyle": null,
+    "testPattern": null,
+    "fileOrganization": "type-based"
+  },
+  "structure": {
+    "isMonorepo": false,
+    "workspaces": [],
+    "mainDirectories": [
+      "docs",
+      "public",
+      "src"
+    ],
+    "gitBranches": {
+      "defaultBranch": "master",
+      "branchingStrategy": null
+    }
+  },
+  "customNotes": [],
+  "directoryMap": {
+    "docs": {
+      "path": "docs",
+      "purpose": "Documentation",
+      "fileCount": 2,
+      "lastAccessed": 1781494619299,
+      "keyFiles": [
+        "季度税务申报流程.md",
+        "收支数据流审计.md"
+      ]
+    },
+    "generated_reports": {
+      "path": "generated_reports",
+      "purpose": null,
+      "fileCount": 1,
+      "lastAccessed": 1781494619300,
+      "keyFiles": [
+        "财务报表_月季报_2026-01-01至2026-03-31_20260403033219.xls"
+      ]
+    },
+    "logs": {
+      "path": "logs",
+      "purpose": null,
+      "fileCount": 2,
+      "lastAccessed": 1781494619302,
+      "keyFiles": [
+        "launchd-stderr.log",
+        "launchd-stdout.log"
+      ]
+    },
+    "public": {
+      "path": "public",
+      "purpose": "Public files",
+      "fileCount": 1,
+      "lastAccessed": 1781494619302,
+      "keyFiles": [
+        "vite.svg"
+      ]
+    },
+    "server": {
+      "path": "server",
+      "purpose": null,
+      "fileCount": 5,
+      "lastAccessed": 1781494619302,
+      "keyFiles": [
+        "alembic.ini",
+        "data.db",
+        "launcher.py",
+        "migrate_data.py",
+        "requirements.txt"
+      ]
+    },
+    "src": {
+      "path": "src",
+      "purpose": "Source code",
+      "fileCount": 3,
+      "lastAccessed": 1781494619302,
+      "keyFiles": [
+        "App.tsx",
+        "main.tsx",
+        "vite-env.d.ts"
+      ]
+    },
+    "财报模板": {
+      "path": "财报模板",
+      "purpose": null,
+      "fileCount": 2,
+      "lastAccessed": 1781494619302,
+      "keyFiles": [
+        "财务报表报送与信息采集（小企业会计准则）年报.xls",
+        "财务报表报送与信息采集（小企业会计准则）月季报.xls"
+      ]
+    },
+    "server/app": {
+      "path": "server/app",
+      "purpose": "Application code",
+      "fileCount": 7,
+      "lastAccessed": 1781494619303,
+      "keyFiles": [
+        "__init__.py",
+        "config.py",
+        "database.py"
+      ]
+    },
+    "server/migrations": {
+      "path": "server/migrations",
+      "purpose": "Database migrations",
+      "fileCount": 3,
+      "lastAccessed": 1781494619303,
+      "keyFiles": [
+        "add_self_tax_filing.py",
+        "add_tax_settings.py",
+        "fix_balance_inconsistency.py"
+      ]
+    },
+    "src/api": {
+      "path": "src/api",
+      "purpose": "API routes",
+      "fileCount": 13,
+      "lastAccessed": 1781494619303,
+      "keyFiles": [
+        "account.ts",
+        "budget.ts",
+        "category.ts"
+      ]
+    },
+    "src/components": {
+      "path": "src/components",
+      "purpose": "UI components",
+      "fileCount": 11,
+      "lastAccessed": 1781494619303,
+      "keyFiles": [
+        "AccountSelect.tsx",
+        "AmountInput.tsx",
+        "AmountText.tsx"
+      ]
+    },
+    "src/pages": {
+      "path": "src/pages",
+      "purpose": "Page components",
+      "fileCount": 0,
+      "lastAccessed": 1781494619303,
+      "keyFiles": []
+    }
+  },
+  "hotPaths": [
+    {
+      "path": "package.json",
+      "accessCount": 2,
+      "lastAccessed": 1781109542036,
+      "type": "file"
+    },
+    {
+      "path": "agent.md",
+      "accessCount": 1,
+      "lastAccessed": 1781109298778,
+      "type": "file"
+    },
+    {
+      "path": "TAX_SETTINGS_README.md",
+      "accessCount": 1,
+      "lastAccessed": 1781109523094,
+      "type": "file"
+    },
+    {
+      "path": "server/requirements.txt",
+      "accessCount": 1,
+      "lastAccessed": 1781109550131,
+      "type": "file"
+    }
+  ],
+  "userDirectives": []
+}

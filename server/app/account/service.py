@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from decimal import Decimal
 from typing import Optional, Union, List
 
 from sqlalchemy import select, or_
@@ -36,10 +37,11 @@ async def get_account_by_id(db: AsyncSession, account_id: str) -> Optional[dict]
 
 
 async def create_account(db: AsyncSession, data: AccountCreate) -> dict:
+    # 新账户尚无流水，余额恒等于期初余额
     account = Account(
         name=data.name,
         type=data.type,
-        balance=data.balance if data.balance else data.initialBalance,
+        balance=data.initialBalance,
         initial_balance=data.initialBalance,
         icon=data.icon,
         color=data.color,
@@ -57,6 +59,10 @@ async def update_account(db: AsyncSession, account_id: str, data: AccountUpdate)
     if not account:
         return None
     update_data = data.model_dump(exclude_unset=True)
+    # 期初余额修改时把差额同步平移到余额，保持「余额 = 期初 + Σ流水」不变式
+    if "initialBalance" in update_data:
+        delta = Decimal(str(update_data["initialBalance"])) - Decimal(str(float(account.initial_balance or 0)))
+        account.balance += delta
     field_map = {"initialBalance": "initial_balance", "isDefault": "is_default"}
     for key, value in update_data.items():
         attr = field_map.get(key, key)

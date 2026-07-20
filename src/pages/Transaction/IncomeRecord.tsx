@@ -57,7 +57,6 @@ const IncomeRecord: React.FC = () => {
           description: values.description || '',
           tags: [],
           attachments: [],
-          bookId: 'default',
           paymentConfirmed: values.paymentAccountType === 'company',
           paymentAccountType: values.paymentAccountType || undefined,
           payerName: values.payerName || undefined,

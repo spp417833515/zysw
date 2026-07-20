@@ -33,9 +33,9 @@ export interface InvoiceItem {
 }
 
 export const invoiceTypeLabels: Record<InvoiceType, string> = {
-  normal: '增值税普通发票',
-  special: '增值税专用发票',
-  electronic: '电子发票',
+  normal: '增值税普通发票（普票）',
+  special: '增值税专用发票（专票，不免征）',
+  electronic: '电子普通发票（普票）',
 };
 
 export const invoiceDirectionLabels: Record<InvoiceDirection, string> = {

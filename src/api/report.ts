@@ -88,3 +88,84 @@ export function deleteTaxReport(filename: string) {
 export function getTaxReportDownloadUrl(filename: string) {
   return `/api/reports/tax-report/download?filename=${encodeURIComponent(filename)}`;
 }
+
+// ======== 报表预览（与生成 XLS 完全同源的数据） ========
+
+export interface TaxReportSnapshot {
+  cash: number;
+  receivables: number;
+  payables: number;
+  unpaid_salary: number;
+}
+
+export interface TaxReportPnl {
+  revenue: number;
+  cost: number;
+  tax_add: number;
+  sales: number;
+  admin: number;
+  finance: number;
+  interest_net: number;
+  non_op: number;
+  operating_profit: number;
+  profit_total: number;
+  income_tax: number;
+  net_profit: number;
+}
+
+export interface TaxReportCashSide {
+  income: number;
+  interest: number;
+  expenses: Record<string, number>;
+  salary: number;
+  salary_tax: number;
+}
+
+export interface TaxReportFiling {
+  profitYtd: number;
+  taxableIncome: number;
+  statutoryTax: number;
+  reliefAmount: number;
+  accruedTax: number;
+  prepaidTax: number;
+  currentDue: number;
+  creditCarryover: number;
+  assetsTotalWan: number;
+  isSmallMicro: boolean;
+  salaryAccruedYtd: number;
+  salaryPaidYtd: number;
+}
+
+export interface TaxReportPreview {
+  common: {
+    company: { tax_number: string; company_name: string };
+    period: { start: string; end: string };
+    snapshot_end: TaxReportSnapshot;
+    snapshot_year_start: TaxReportSnapshot;
+    tax_payable: number;
+    tax_payable_year_start: number;
+    tax_prepaid: number;
+    tax_prepaid_year_start: number;
+    pnl_period: TaxReportPnl;
+    pnl_ytd: TaxReportPnl;
+  };
+  cash_flow: {
+    income_period: number;
+    interest_period: number;
+    expenses_period: Record<string, number>;
+    salary_period: number;
+    salary_tax_period: number;
+    opening_period: number;
+    income_ytd: number;
+    interest_ytd: number;
+    expenses_ytd: Record<string, number>;
+    salary_ytd: number;
+    salary_tax_ytd: number;
+    opening_ytd: number;
+  };
+  filing: TaxReportFiling;
+}
+
+export function getTaxReportPreview(params: { startDate: string; endDate: string }) {
+  return request.get<ApiResponse<TaxReportPreview>>('/reports/tax-report/preview', { params });
+}

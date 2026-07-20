@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import Numeric, String, Index
+from sqlalchemy import ForeignKey, Numeric, String, Index
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
@@ -15,9 +15,9 @@ class Budget(Base):
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     name: Mapped[str] = mapped_column(String(100), nullable=False)
-    category_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    category_id: Mapped[str] = mapped_column(String(36), ForeignKey("categories.id"), nullable=False)
     amount: Mapped[float] = mapped_column(Numeric(12, 2), nullable=False)
-    spent: Mapped[float] = mapped_column(Numeric(12, 2), default=0.0)
+    # spent 不落库：读取时按流水实时重算（单一事实来源）
     period: Mapped[str] = mapped_column(String(20), nullable=False)  # monthly | quarterly | yearly
     start_date: Mapped[str] = mapped_column(String(30), nullable=False)
     end_date: Mapped[str] = mapped_column(String(30), nullable=False)

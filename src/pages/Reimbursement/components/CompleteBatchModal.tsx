@@ -39,8 +39,8 @@ const CompleteBatchModal: React.FC<Props> = ({ batch, onClose, onSuccess }) => {
       message.success('报销完成');
       onClose();
       onSuccess();
-    } catch {
-      message.error('操作失败');
+    } catch (e) {
+      message.error(e instanceof Error ? e.message : '操作失败');
     } finally {
       setSubmitting(false);
     }

@@ -89,17 +89,41 @@ async def generate_tax_report(
         return error(f"生成报表失败: {str(e)}", code=500)
 
 
+@router.get("/tax-report/preview")
+async def preview_tax_report(
+    startDate: str = Query(..., description="所属期起 YYYY-MM-DD"),
+    endDate: str = Query(..., description="所属期止 YYYY-MM-DD"),
+    db: AsyncSession = Depends(get_db),
+):
+    """报表数据预览（与生成 XLS 完全同源）：三张报表 + 季度申报助手"""
+    try:
+        data = await tax_report.build_report_data(db, startDate, endDate)
+        return success(data)
+    except Exception as e:
+        return error(f"预览失败: {str(e)}", code=500)
+
+
+def _safe_report_path(filename: str) -> Optional[str]:
+    """把用户传入的文件名限制在报表输出目录内（防路径穿越），非法即返回 None"""
+    from app.report.tax_report import OUTPUT_DIR
+    if os.path.basename(filename) != filename or not filename.endswith(".xls"):
+        return None
+    path = os.path.realpath(os.path.join(OUTPUT_DIR, filename))
+    if os.path.dirname(path) != os.path.realpath(OUTPUT_DIR):
+        return None
+    return path
+
+
 @router.get("/tax-report/download")
 async def download_tax_report(filename: str = Query(...)):
     """下载已生成的报表文件"""
-    from app.report.tax_report import OUTPUT_DIR
-    path = os.path.join(OUTPUT_DIR, filename)
-    if not os.path.exists(path):
+    path = _safe_report_path(filename)
+    if not path or not os.path.exists(path):
         return error("文件不存在", code=404)
     return FileResponse(
         path,
         media_type="application/vnd.ms-excel",
-        filename=filename,
+        filename=os.path.basename(path),
     )
 
 

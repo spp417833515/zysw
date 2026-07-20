@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Card, Descriptions, Table, Button, Space, Popconfirm, Typography, Tag, message } from 'antd';
 import {
@@ -11,39 +11,41 @@ import PageContainer from '@/components/PageContainer';
 import AmountText from '@/components/AmountText';
 import { useAccountStore } from '@/store/useAccountStore';
 import { accountTypeLabels } from '@/types/account';
-import { mockTransactions } from '@/mock/data';
+import { getTransactions } from '@/api/transaction';
+import type { Transaction } from '@/types/transaction';
 import AccountFormModal from './components/AccountFormModal';
 import type { Account } from '@/types/account';
 
 const { Text } = Typography;
 
-interface Transaction {
-  id: string;
-  date: string;
-  type: string;
-  categoryName?: string;
-  description?: string;
-  amount: number;
-  accountId?: string;
-}
-
 const AccountDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { accounts, deleteAccount, updateAccount } = useAccountStore();
+  const { accounts, fetchAccounts, deleteAccount, updateAccount } = useAccountStore();
 
   const [editModalOpen, setEditModalOpen] = React.useState(false);
+  const [transactions, setTransactions] = React.useState<Transaction[]>([]);
+  const [txnLoading, setTxnLoading] = React.useState(false);
+
+  // 直接刷新/深链进入时 store 为空，需要主动拉取
+  useEffect(() => {
+    if (accounts.length === 0) {
+      fetchAccounts();
+    }
+  }, [accounts.length, fetchAccounts]);
 
   const account = useMemo(
     () => accounts.find((a) => a.id === id),
     [accounts, id],
   );
 
-  const transactions = useMemo(() => {
-    if (!id) return [];
-    return (mockTransactions as Transaction[]).filter(
-      (t) => t.accountId === id,
-    );
+  useEffect(() => {
+    if (!id) return;
+    setTxnLoading(true);
+    getTransactions({ accountId: id, page: 1, pageSize: 50 })
+      .then((res) => setTransactions(res.data?.data ?? []))
+      .catch(() => setTransactions([]))
+      .finally(() => setTxnLoading(false));
   }, [id]);
 
   const handleDelete = async () => {
@@ -115,6 +117,14 @@ const AccountDetail: React.FC = () => {
   ];
 
   if (!account) {
+    if (accounts.length === 0) {
+      // 账户列表尚未加载完成（直接刷新/深链场景）
+      return (
+        <PageContainer title="账户详情">
+          <Card loading />
+        </PageContainer>
+      );
+    }
     return (
       <PageContainer title="账户详情">
         <Card>
@@ -189,6 +199,7 @@ const AccountDetail: React.FC = () => {
           columns={columns}
           dataSource={transactions}
           rowKey="id"
+          loading={txnLoading}
           pagination={{ pageSize: 10 }}
           locale={{ emptyText: '暂无交易记录' }}
         />

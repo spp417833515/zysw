@@ -19,7 +19,6 @@ export interface Transaction {
   tags: string[];
   attachments: Attachment[];
   invoiceId?: string;
-  bookId: string;
   createdAt: string;
   updatedAt: string;
 

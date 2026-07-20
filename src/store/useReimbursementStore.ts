@@ -9,6 +9,9 @@ import {
   getUnpaidReimbursements,
   confirmReimbursementPayment,
 } from '@/api/reimbursement';
+import { ensureOk } from '@/api/request';
+import { useAccountStore } from '@/store/useAccountStore';
+import { useTransactionStore } from '@/store/useTransactionStore';
 
 interface ReimbursementState {
   batches: ReimbursementBatch[];
@@ -59,26 +62,34 @@ export const useReimbursementStore = create<ReimbursementState>((set) => ({
   },
 
   createBatch: async (data) => {
-    await createReimbursement(data);
+    ensureOk(await createReimbursement(data), '创建报销单失败');
     const res = await getReimbursements();
     set({ batches: res.data ?? [] });
+    useTransactionStore.getState().fetchPendingData();
   },
 
   completeBatch: async (id, data) => {
-    await completeReimbursement(id, data);
+    ensureOk(await completeReimbursement(id, data), '确认报销失败');
     const res = await getReimbursements();
     set({ batches: res.data ?? [] });
+    // 手续费会扣账户余额
+    useAccountStore.getState().fetchAccounts();
   },
 
   confirmPayment: async (id, accountId) => {
-    await confirmReimbursementPayment(id, { accountId });
+    ensureOk(await confirmReimbursementPayment(id, { accountId }), '确认打款失败');
     const res = await getReimbursements();
     set({ batches: res.data ?? [] });
+    // 打款扣余额并生成 [RB:] 支出流水
+    useAccountStore.getState().fetchAccounts();
+    useTransactionStore.getState().fetchPendingData();
+    useTransactionStore.getState().fetchTransactions();
   },
 
   deleteBatch: async (id) => {
-    await deleteReimbursement(id);
+    ensureOk(await deleteReimbursement(id), '删除报销单失败');
     const res = await getReimbursements();
     set({ batches: res.data ?? [] });
+    useTransactionStore.getState().fetchPendingData();
   },
 }));

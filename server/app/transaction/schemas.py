@@ -1,5 +1,8 @@
-from typing import Optional, List
-from pydantic import BaseModel
+from typing import Optional, List, Literal
+from pydantic import BaseModel, Field
+
+TransactionType = Literal["income", "expense", "transfer"]
+PaymentAccountType = Literal["company", "personal"]
 
 
 class AttachmentSchema(BaseModel):
@@ -11,19 +14,18 @@ class AttachmentSchema(BaseModel):
 
 
 class TransactionCreate(BaseModel):
-    type: str
-    amount: float
+    type: TransactionType
+    amount: float = Field(gt=0)
     date: str
     categoryId: Optional[str] = None
-    accountId: str
+    accountId: str = Field(min_length=1)
     toAccountId: Optional[str] = None
     description: str = ""
     tags: List[str] = []
     attachments: List[AttachmentSchema] = []
     invoiceId: Optional[str] = None
-    bookId: str = "default"
     paymentConfirmed: bool = False
-    paymentAccountType: Optional[str] = None
+    paymentAccountType: Optional[PaymentAccountType] = None
     payerName: Optional[str] = None
     invoiceNeeded: bool = True
     invoiceCompleted: bool = False
@@ -41,8 +43,8 @@ class BatchTransactionCreate(BaseModel):
 
 
 class TransactionUpdate(BaseModel):
-    type: Optional[str] = None
-    amount: Optional[float] = None
+    type: Optional[TransactionType] = None
+    amount: Optional[float] = Field(default=None, gt=0)
     date: Optional[str] = None
     categoryId: Optional[str] = None
     accountId: Optional[str] = None
@@ -51,9 +53,8 @@ class TransactionUpdate(BaseModel):
     tags: Optional[List[str]] = None
     attachments: Optional[List[AttachmentSchema]] = None
     invoiceId: Optional[str] = None
-    bookId: Optional[str] = None
     paymentConfirmed: Optional[bool] = None
-    paymentAccountType: Optional[str] = None
+    paymentAccountType: Optional[PaymentAccountType] = None
     payerName: Optional[str] = None
     invoiceNeeded: Optional[bool] = None
     invoiceCompleted: Optional[bool] = None
@@ -67,13 +68,13 @@ class TransactionUpdate(BaseModel):
 
 
 class ConfirmPaymentRequest(BaseModel):
-    accountType: str  # company | personal
+    accountType: PaymentAccountType
     accountId: Optional[str] = None  # 若 txn.account_id 为空，则用此值绑定并扣账户
 
 
 class BatchConfirmPaymentRequest(BaseModel):
     ids: List[str]
-    accountType: str  # company | personal
+    accountType: PaymentAccountType
     accountId: Optional[str] = None
 
 

@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Optional
 
-from sqlalchemy import Numeric, String, Text
+from sqlalchemy import ForeignKey, Numeric, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
@@ -25,7 +25,9 @@ class Invoice(Base):
     seller_name: Mapped[str] = mapped_column(String(200), default="")
     seller_tax_number: Mapped[str] = mapped_column(String(50), default="")
     items: Mapped[str] = mapped_column(Text, default="[]")  # JSON array
-    transaction_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True, default=None)
+    # 删交易时自动解除关联（发票留档，不阻断删除）
+    transaction_id: Mapped[Optional[str]] = mapped_column(
+        String(36), ForeignKey("transactions.id", ondelete="SET NULL"), nullable=True, default=None)
     image_url: Mapped[Optional[str]] = mapped_column(String(500), nullable=True, default=None)
     status: Mapped[str] = mapped_column(String(20), default="pending")  # pending | verified | void
     created_at: Mapped[str] = mapped_column(

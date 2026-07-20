@@ -48,14 +48,14 @@ const TaxSettingsForm: React.FC = () => {
         description={
           <Space direction="vertical" size={4}>
             <Text strong>小规模纳税人（年销售额≤500万）：</Text>
-            <Text>• 增值税率：3%，季度销售额30万以下免征</Text>
-            <Text>• 适用于：注册资金较小、员工较少的企业</Text>
+            <Text>• 增值税征收率：3% 减按 1%（优惠延续至2027-12-31），季度销售额30万以下普票免征</Text>
+            <Text>• 专用发票（专票）不享受免征：开出即需按征收率缴纳，且缴后不退（对方已抵扣）</Text>
             <Text strong style={{ marginTop: 8, display: 'block' }}>一般纳税人（年销售额&gt;500万或主动申请）：</Text>
             <Text>• 增值税率：6%（服务业）、9%（运输建筑）、13%（销售货物）</Text>
             <Text>• 可抵扣进项税额</Text>
             <Text strong style={{ marginTop: 8, display: 'block' }}>其他税费：</Text>
             <Text>• 附加税：增值税的12%（城建税7% + 教育费附加3% + 地方教育附加2%）</Text>
-            <Text>• 企业所得税：有限公司25%，小微企业5%-10%优惠税率</Text>
+            <Text>• 企业所得税：年应纳税所得额≤300万实际税负5%（超过则整体25%）；季度预缴多缴部分年度汇算可退</Text>
           </Space>
         }
         type="info"
@@ -69,7 +69,7 @@ const TaxSettingsForm: React.FC = () => {
         layout="vertical"
         onFinish={handleSubmit}
         initialValues={{
-          vatRate: 0.03,
+          vatRate: 0.01,
           vatThresholdQuarterly: 300000,
           additionalTaxRate: 0.12,
           incomeTaxEnabled: true,
@@ -110,7 +110,7 @@ const TaxSettingsForm: React.FC = () => {
           label="增值税率"
           name="vatRate"
           rules={[{ required: true, message: '请输入增值税率' }]}
-          tooltip="小规模纳税人通常为3%，一般纳税人根据行业不同为6%、9%或13%"
+          tooltip="小规模纳税人名义3%、2027年底前减按1%（建议填1%）；一般纳税人根据行业为6%、9%或13%"
         >
           <InputNumber
             min={0}
@@ -182,19 +182,14 @@ const TaxSettingsForm: React.FC = () => {
                 </thead>
                 <tbody>
                   <tr>
-                    <td style={{ padding: '4px 8px' }}>≤100万元</td>
-                    <td style={{ padding: '4px 8px' }}>5%</td>
-                    <td style={{ padding: '4px 8px' }}>小微企业优惠</td>
-                  </tr>
-                  <tr>
-                    <td style={{ padding: '4px 8px' }}>100万-300万元</td>
-                    <td style={{ padding: '4px 8px' }}>10%</td>
-                    <td style={{ padding: '4px 8px' }}>小微企业优惠</td>
+                    <td style={{ padding: '4px 8px' }}>≤300万元</td>
+                    <td style={{ padding: '4px 8px' }}>5%（实际税负）</td>
+                    <td style={{ padding: '4px 8px' }}>小微企业优惠：应纳税所得额减按25%计入 × 20% 税率</td>
                   </tr>
                   <tr>
                     <td style={{ padding: '4px 8px' }}>&gt;300万元</td>
                     <td style={{ padding: '4px 8px' }}>25%</td>
-                    <td style={{ padding: '4px 8px' }}>标准税率</td>
+                    <td style={{ padding: '4px 8px' }}>标准税率（超过即整体不再享受小微优惠）</td>
                   </tr>
                 </tbody>
               </table>

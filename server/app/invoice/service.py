@@ -8,7 +8,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.invoice.models import Invoice
 from app.invoice.schemas import InvoiceCreate, InvoiceUpdate
-from app.plugin.base import registry
 from app.transaction.models import Transaction
 from app.settings.models import CompanyInfo
 
@@ -206,7 +205,6 @@ async def create_invoice(db: AsyncSession, data: InvoiceCreate) -> dict:
     db.add(inv)
     await db.commit()
     await db.refresh(inv)
-    await registry.emit("invoice.created", {"id": inv.id})
     return _to_dict(inv)
 
 
@@ -263,7 +261,6 @@ async def update_invoice(db: AsyncSession, invoice_id: str, data: InvoiceUpdate)
     inv.updated_at = datetime.now(timezone.utc).isoformat()
     await db.commit()
     await db.refresh(inv)
-    await registry.emit("invoice.updated", {"id": inv.id})
     return _to_dict(inv)
 
 
@@ -273,7 +270,6 @@ async def delete_invoice(db: AsyncSession, invoice_id: str) -> bool:
         return False
     await db.delete(inv)
     await db.commit()
-    await registry.emit("invoice.deleted", {"id": invoice_id})
     return True
 
 

@@ -20,6 +20,7 @@ import {
   usePendingTaxes,
 } from '@/store/useTransactionStore';
 import { useRecurringExpenseStore } from '@/store/useRecurringExpenseStore';
+import { useAccountStore } from '@/store/useAccountStore';
 import { TRANSACTION_TYPE_MAP } from '@/utils/constants';
 import { formatDate } from '@/utils/format';
 import { computeReminders, computeRecurringReminders, REMINDER_TYPE_LABELS } from '@/utils/reminder';
@@ -117,7 +118,7 @@ const Tasks: React.FC = () => {
     fetchPendingData();
     fetchRecurring();
     fetchUnpaid();
-  }, [fetchPendingData, fetchRecurring]);
+  }, [fetchPendingData, fetchRecurring, fetchUnpaid]);
 
   const baseColumns = [
     {
@@ -494,7 +495,12 @@ const Tasks: React.FC = () => {
         open={salaryModalOpen}
         item={payingItem}
         onClose={() => { setSalaryModalOpen(false); setPayingItem(null); }}
-        onSuccess={fetchUnpaid}
+        onSuccess={() => {
+          // 工资确认会扣账户余额并可能生成差额待支出流水，相关数据一并刷新
+          fetchUnpaid();
+          fetchPendingData();
+          useAccountStore.getState().fetchAccounts();
+        }}
       />
       <BatchPaymentConfirmModal
         open={batchPayOpen}

@@ -52,7 +52,8 @@ async def calc_tax(
         from sqlalchemy import and_
         import datetime
         year = datetime.datetime.now().year
-        cumulative = await service._get_cumulative_data(db, employeeId, year, month)
+        cumulative = await service._get_cumulative_data(
+            db, employeeId, year, month, socialInsuranceRate, housingFundRate)
         prev_months = cumulative["month_count"]
         month_index = prev_months + 1
         prev_records = (await db.execute(
@@ -201,7 +202,10 @@ async def update_employee(employee_id: str, data: EmployeeUpdate, db: AsyncSessi
 
 @router.delete("/{employee_id}")
 async def delete_employee(employee_id: str, db: AsyncSession = Depends(get_db)):
-    deleted = await service.delete_employee(db, employee_id)
+    try:
+        deleted = await service.delete_employee(db, employee_id)
+    except ValueError as e:
+        return error(str(e), code=409)
     if not deleted:
         return error("Employee not found", code=404)
     return success(None)

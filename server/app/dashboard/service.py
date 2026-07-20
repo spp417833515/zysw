@@ -4,6 +4,7 @@ from sqlalchemy import select, func, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.transaction.models import Transaction
+from app.transaction.service import business_expense_conditions
 
 
 def _get_current_quarter_range() -> tuple[str, str, str]:
@@ -33,10 +34,10 @@ async def get_dashboard_summary(db: AsyncSession) -> dict:
     )
     quarterly_income = float(inc_result.scalar() or 0)
 
-    # Quarterly expense
+    # Quarterly expense（统一费用口径：排除 [RB:] 报销打款，防止与垫付原始流水双计）
     exp_result = await db.execute(
         select(func.coalesce(func.sum(Transaction.amount), 0.0))
-        .where(and_(date_filter, Transaction.type == "expense"))
+        .where(and_(date_filter, *business_expense_conditions()))
     )
     quarterly_expense = float(exp_result.scalar() or 0)
 

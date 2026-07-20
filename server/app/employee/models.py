@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Optional
 
-from sqlalchemy import String, Text, Numeric, Integer, Boolean, UniqueConstraint
+from sqlalchemy import String, Text, Numeric, Integer, Boolean, UniqueConstraint, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
@@ -46,15 +46,15 @@ class SalaryRecord(Base):
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    employee_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    employee_id: Mapped[str] = mapped_column(String(36), ForeignKey("employees.id"), nullable=False)
     employee_name: Mapped[str] = mapped_column(String(100), default="")
     year: Mapped[int] = mapped_column(Integer, nullable=False)
     month: Mapped[int] = mapped_column(Integer, nullable=False)
     base_salary: Mapped[float] = mapped_column(Numeric(12, 2), default=0)
     tax: Mapped[float] = mapped_column(Numeric(12, 2), default=0)
     net_salary: Mapped[float] = mapped_column(Numeric(12, 2), default=0)
-    status: Mapped[str] = mapped_column(String(20), default="confirmed")  # confirmed
-    transaction_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True, default=None)
+    transaction_id: Mapped[Optional[str]] = mapped_column(
+        String(36), ForeignKey("transactions.id"), nullable=True, default=None)
     confirmed_at: Mapped[str] = mapped_column(
         String(30), default=lambda: datetime.now(timezone.utc).isoformat()
     )

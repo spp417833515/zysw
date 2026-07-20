@@ -15,6 +15,13 @@ async def list_accounts(db: AsyncSession = Depends(get_db)):
     return success(accounts)
 
 
+@router.get("/reconciliation")
+async def reconcile_accounts(db: AsyncSession = Depends(get_db)):
+    """只读对账：逐账户比较存储余额与「期初 + Σ流水」重算值"""
+    from app.transaction.service import reconcile_accounts as _reconcile
+    return success(await _reconcile(db))
+
+
 @router.get("/{account_id}")
 async def get_account(account_id: str, db: AsyncSession = Depends(get_db)):
     account = await service.get_account_by_id(db, account_id)

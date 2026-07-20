@@ -1,8 +1,11 @@
+import asyncio
 from contextlib import asynccontextmanager
+from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import APIRouter, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.config import UPLOAD_DIR, settings
 from app.database import Base, async_session, engine
@@ -16,7 +19,19 @@ async def lifespan(app: FastAPI):
     from app.seed import seed
     async with async_session() as db:
         await seed(db)
+    # 启动对账断言：余额必须等于「期初 + Σ流水」，不一致时告警（不阻断启动）
+    from app.transaction.service import reconcile_accounts
+    async with async_session() as db:
+        for item in await reconcile_accounts(db):
+            if not item["consistent"]:
+                print(f"⚠️  [对账告警] 账户「{item['accountName']}」余额 {item['balance']} "
+                      f"≠ 期初+Σ流水 {item['expected']}（差 {item['diff']:+.2f}），"
+                      f"请检查 GET /accounts/reconciliation")
+    # 自动备份常驻任务
+    from app.backup.service import backup_scheduler
+    scheduler = asyncio.create_task(backup_scheduler())
     yield
+    scheduler.cancel()
 
 
 app = FastAPI(title="小微企业财务记账系统", version="1.0.0", lifespan=lifespan)
@@ -55,23 +70,57 @@ from app.reimbursement.router import router as reimbursement_router  # noqa: E40
 from app.contact.router import router as contact_router  # noqa: E402
 from app.employee.router import router as employee_router  # noqa: E402
 from app.dashboard.router import router as dashboard_router  # noqa: E402
+from app.backup.router import router as backup_router  # noqa: E402
 
-app.include_router(account_router)
-app.include_router(category_router)
-app.include_router(transaction_router)
-app.include_router(invoice_router)
-app.include_router(budget_router)
-app.include_router(report_router)
-app.include_router(recurring_expense_router)
-app.include_router(upload_router)
-app.include_router(settings_router)
-app.include_router(reimbursement_router)
-app.include_router(contact_router)
-app.include_router(employee_router)
-app.include_router(dashboard_router)
+api_router = APIRouter()
+for _r in (
+    account_router,
+    category_router,
+    transaction_router,
+    invoice_router,
+    budget_router,
+    report_router,
+    recurring_expense_router,
+    upload_router,
+    settings_router,
+    reimbursement_router,
+    contact_router,
+    employee_router,
+    dashboard_router,
+    backup_router,
+):
+    api_router.include_router(_r)
+
+# 裸路径（本地 vite 代理会剥掉 /api）与 /api 前缀（生产同源部署）都可访问
+app.include_router(api_router)
+app.include_router(api_router, prefix="/api", include_in_schema=False)
+
+
+@app.get("/health")
+async def health():
+    return {"status": "ok"}
+
 
 # Serve uploaded files
 app.mount("/uploads", StaticFiles(directory=str(UPLOAD_DIR)), name="uploads")
+
+
+# 生产模式：托管前端构建产物（vite build 输出到项目根 dist/）；未构建则跳过
+class SPAStaticFiles(StaticFiles):
+    """404 时回退到 index.html，支持 react-router 的前端路由直达。"""
+
+    async def get_response(self, path: str, scope):
+        try:
+            return await super().get_response(path, scope)
+        except StarletteHTTPException as e:
+            if e.status_code == 404:
+                return await super().get_response("index.html", scope)
+            raise
+
+
+DIST_DIR = Path(__file__).resolve().parent.parent.parent / "dist"
+if DIST_DIR.is_dir():
+    app.mount("/", SPAStaticFiles(directory=str(DIST_DIR), html=True), name="frontend")
 
 
 if __name__ == "__main__":

@@ -21,6 +21,7 @@ import {
   DeleteOutlined,
   ReloadOutlined,
   ThunderboltOutlined,
+  EyeOutlined,
 } from '@ant-design/icons';
 import dayjs, { Dayjs } from 'dayjs';
 import PageContainer from '@/components/PageContainer';
@@ -31,6 +32,7 @@ import {
   getTaxReportDownloadUrl,
   TaxReportFile,
 } from '@/api/report';
+import TaxReportPreviewModal from './components/TaxReportPreviewModal';
 
 const { Title, Text } = Typography;
 const { RangePicker } = DatePicker;
@@ -65,6 +67,7 @@ const TaxReport: React.FC = () => {
   const [generating, setGenerating] = useState(false);
   const [reports, setReports] = useState<TaxReportFile[]>([]);
   const [loading, setLoading] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
 
   const currentYear = dayjs().year();
   const currentMonth = dayjs().month() + 1;
@@ -215,16 +218,25 @@ const TaxReport: React.FC = () => {
             </Space>
           </Col>
           <Col>
-            <Button
-              type="primary"
-              icon={<ThunderboltOutlined />}
-              onClick={handleGenerate}
-              loading={generating}
-              disabled={!dateRange}
-              style={{ background: '#217346' }}
-            >
-              生成报表
-            </Button>
+            <Space>
+              <Button
+                icon={<EyeOutlined />}
+                onClick={() => setPreviewOpen(true)}
+                disabled={!dateRange}
+              >
+                预览
+              </Button>
+              <Button
+                type="primary"
+                icon={<ThunderboltOutlined />}
+                onClick={handleGenerate}
+                loading={generating}
+                disabled={!dateRange}
+                style={{ background: '#217346' }}
+              >
+                生成报表
+              </Button>
+            </Space>
           </Col>
         </Row>
 
@@ -306,6 +318,15 @@ const TaxReport: React.FC = () => {
           locale={{ emptyText: '暂无已生成的报表' }}
         />
       </Card>
+
+      {dateRange && (
+        <TaxReportPreviewModal
+          open={previewOpen}
+          startDate={dateRange[0].format('YYYY-MM-DD')}
+          endDate={dateRange[1].format('YYYY-MM-DD')}
+          onClose={() => setPreviewOpen(false)}
+        />
+      )}
     </PageContainer>
   );
 };

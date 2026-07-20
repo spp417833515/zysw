@@ -4,13 +4,12 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Optional, List
 
-from sqlalchemy import select, func, and_
+from sqlalchemy import select, func, and_, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.account.models import Account
 from app.category.models import Category
 from app.contact.models import Contact
-from app.plugin.base import registry
 from app.transaction.models import Attachment, Transaction
 from app.transaction.schemas import TransactionCreate, TransactionUpdate
 
@@ -23,9 +22,10 @@ def _to_dict(txn: Transaction, attachments: Optional[list] = None,
         "type": txn.type,
         "amount": float(txn.amount),
         "date": txn.date,
-        "categoryId": txn.category_id,
+        "categoryId": txn.category_id or "",
         "categoryName": category_name,
-        "accountId": txn.account_id,
+        # 库内 NULL，对外仍输出空串（保持前端契约不变）
+        "accountId": txn.account_id or "",
         "accountName": account_name,
         "toAccountId": txn.to_account_id,
         "toAccountName": to_account_name,
@@ -35,7 +35,6 @@ def _to_dict(txn: Transaction, attachments: Optional[list] = None,
         "tags": json.loads(txn.tags) if txn.tags else [],
         "attachments": attachments or [],
         "invoiceId": txn.invoice_id,
-        "bookId": txn.book_id,
         "createdAt": txn.created_at,
         "updatedAt": txn.updated_at,
         "paymentConfirmed": txn.payment_confirmed,
@@ -138,26 +137,177 @@ async def _batch_enrich(db: AsyncSession, txns: List[Transaction]) -> List[dict]
     return items
 
 
+# 报销打款流水的描述前缀标记（仅作展示；口径过滤一律走 payout_batch_id 结构化列）
+REIMBURSE_PAYOUT_MARKER_PREFIX = "[RB:"
+
+
+def exclude_reimburse_payout_condition():
+    """排除报销打款流水的过滤条件——打款是清偿负债，
+    费用已由员工垫付的原始流水计入，再计一次即双计。
+    按结构化关联列判定（描述文本用户可改，不作为口径依据）。"""
+    return Transaction.payout_batch_id.is_(None)
+
+
+def business_expense_conditions() -> list:
+    """费用统计的统一口径（全系统唯一定义点，权责视角）：
+    type=expense 且排除 [RB:] 报销打款流水。
+    Dashboard / 报表中心 / 预算 / 税务报表的费用合计都必须用本条件。
+    """
+    return [
+        Transaction.type == "expense",
+        exclude_reimburse_payout_condition(),
+    ]
+
+
+def company_cash_conditions() -> list:
+    """公司现金收付的统一口径（收付实现视角）：
+    仅计「已确认收付 且 非私户垫付」的流水——私户垫付没动公司的钱，
+    [RB:] 报销打款是公司真实出款、自然计入。
+    """
+    return [
+        Transaction.payment_confirmed == True,  # noqa: E712
+        or_(Transaction.payment_account_type.is_(None),
+            Transaction.payment_account_type != "personal"),
+    ]
+
+
+def _counts_toward_balance(txn_type: str, payment_confirmed: bool,
+                           payment_account_type: Optional[str]) -> bool:
+    """余额统一口径（全系统唯一判定点）：
+    - transfer：内部资金划转，创建即生效
+    - income/expense：仅在「已确认收付 且 非私户垫付」时计入公司账户余额
+      （未确认=挂账不动钱；personal=员工垫付，公司账户没出钱）
+    """
+    if txn_type == "transfer":
+        return True
+    return bool(payment_confirmed) and payment_account_type != "personal"
+
+
 async def _update_balance(db: AsyncSession, txn_type: str, amount: float,
                           account_id: str, to_account_id: Optional[str],
-                          reverse: bool = False, payment_account_type: Optional[str] = None):
-    # 个人代付不影响公司账户余额
-    if payment_account_type == "personal":
-        return
+                          reverse: bool = False):
+    """机械施加余额效果。是否应该计入由调用方用 _counts_toward_balance 判定。
+
+    账户不存在时立即抛错（快速失败），禁止「状态改了、余额没动」的静默账实分离。
+    """
     multiplier = -1 if reverse else 1
     delta = Decimal(str(amount)) * multiplier
     account = await db.get(Account, account_id)
-    if account:
-        if txn_type == "income":
-            account.balance += delta
-        elif txn_type == "expense":
-            account.balance -= delta
-        elif txn_type == "transfer":
-            account.balance -= delta
+    if not account:
+        raise ValueError(f"账户不存在，无法更新余额: {account_id}")
+    if txn_type == "income":
+        account.balance += delta
+    elif txn_type == "expense":
+        account.balance -= delta
+    elif txn_type == "transfer":
+        account.balance -= delta
     if txn_type == "transfer" and to_account_id:
         to_account = await db.get(Account, to_account_id)
-        if to_account:
-            to_account.balance += delta
+        if not to_account:
+            raise ValueError(f"转入账户不存在，无法更新余额: {to_account_id}")
+        to_account.balance += delta
+
+
+async def create_confirmed_transaction(
+    db: AsyncSession,
+    *,
+    txn_type: str,
+    amount: float,
+    date: str,
+    category_id: str,
+    account_id: str,
+    description: str,
+    payment_account_type: str = "company",
+    confirmed_at: Optional[str] = None,
+    to_account_id: Optional[str] = None,
+) -> Transaction:
+    """跨模块创建「已确认收付」流水的唯一入口（报销打款/手续费、工资发放等）。
+
+    校验账户存在 → 落流水 → 按统一口径施加余额效果，三件事绑定在一起，
+    杜绝各业务模块自己 new Transaction + 手工加减余额造成的口径漂移。
+    调用方负责 commit。
+    """
+    if not await db.get(Account, account_id):
+        raise ValueError(f"账户不存在: {account_id}")
+    now = confirmed_at or datetime.now(timezone.utc).isoformat()
+    txn = Transaction(
+        id=str(uuid.uuid4()),
+        type=txn_type,
+        amount=amount,
+        date=date,
+        category_id=category_id,
+        account_id=account_id,
+        to_account_id=to_account_id,
+        description=description,
+        tags="[]",
+        payment_confirmed=True,
+        payment_account_type=payment_account_type,
+        payment_confirmed_at=now,
+        invoice_needed=False,
+    )
+    db.add(txn)
+    if _counts_toward_balance(txn_type, True, payment_account_type):
+        await _update_balance(db, txn_type, amount, account_id, to_account_id)
+    # 先 flush 落库：调用方常把返回流水的 id 写入带外键的关联表
+    # （如 salary_records.transaction_id），不 flush 则插入顺序不保证、外键会违约
+    await db.flush()
+    return txn
+
+
+async def adjust_transaction_amount(db: AsyncSession, txn: Transaction, new_amount: float) -> None:
+    """修改流水金额并按统一口径同步余额（先冲销旧额，再施加新额）。
+
+    业务模块改金额必须走这里，禁止自己手工加减余额。调用方负责 commit。
+    """
+    counts = _counts_toward_balance(txn.type, txn.payment_confirmed, txn.payment_account_type)
+    if counts:
+        await _update_balance(db, txn.type, float(txn.amount), txn.account_id,
+                              txn.to_account_id, reverse=True)
+    txn.amount = new_amount
+    txn.updated_at = datetime.now(timezone.utc).isoformat()
+    if counts:
+        await _update_balance(db, txn.type, new_amount, txn.account_id, txn.to_account_id)
+
+
+async def compute_expected_balances(db: AsyncSession) -> dict:
+    """按「期初余额 + Σ计入余额的流水」重算每个账户的应有余额。
+
+    这是余额的唯一推导口径（与 _counts_toward_balance 同源），
+    seed、对账断言、修复脚本都必须复用本函数，禁止各自重算。
+    返回 {account_id: Decimal 应有余额}。
+    """
+    accounts = (await db.execute(select(Account))).scalars().all()
+    expected = {a.id: Decimal(str(float(a.initial_balance or 0))) for a in accounts}
+    txns = (await db.execute(select(Transaction))).scalars().all()
+    for t in txns:
+        if not _counts_toward_balance(t.type, t.payment_confirmed, t.payment_account_type):
+            continue
+        amt = Decimal(str(float(t.amount)))
+        if t.account_id in expected:
+            expected[t.account_id] += amt if t.type == "income" else -amt
+        if t.type == "transfer" and t.to_account_id in expected:
+            expected[t.to_account_id] += amt
+    return expected
+
+
+async def reconcile_accounts(db: AsyncSession) -> List[dict]:
+    """只读对账：逐账户比较存储余额与流水重算值，返回差异明细。"""
+    accounts = (await db.execute(select(Account))).scalars().all()
+    expected = await compute_expected_balances(db)
+    report = []
+    for a in accounts:
+        actual = Decimal(str(float(a.balance)))
+        exp = expected[a.id]
+        diff = actual - exp
+        report.append({
+            "accountId": a.id,
+            "accountName": a.name,
+            "balance": float(actual),
+            "expected": float(exp),
+            "diff": float(diff),
+            "consistent": abs(diff) < Decimal("0.005"),
+        })
+    return report
 
 
 async def get_transactions(
@@ -228,6 +378,18 @@ async def get_transaction_by_id(db: AsyncSession, txn_id: str) -> Optional[dict]
 
 
 async def create_transaction(db: AsyncSession, data: TransactionCreate) -> dict:
+    # 分类必填（库 DDL 为 NOT NULL，提前拦截避免 IntegrityError 500）
+    if not data.categoryId:
+        raise ValueError("必须选择分类")
+    # 账户必须真实存在（库层无外键，应用层兜底）
+    if not await db.get(Account, data.accountId):
+        raise ValueError(f"账户不存在: {data.accountId}")
+    if data.type == "transfer":
+        if not data.toAccountId:
+            raise ValueError("转账必须选择转入账户")
+        if not await db.get(Account, data.toAccountId):
+            raise ValueError(f"转入账户不存在: {data.toAccountId}")
+
     txn = Transaction(
         type=data.type,
         amount=data.amount,
@@ -238,7 +400,6 @@ async def create_transaction(db: AsyncSession, data: TransactionCreate) -> dict:
         description=data.description,
         tags=json.dumps(data.tags),
         invoice_id=data.invoiceId,
-        book_id=data.bookId,
         payment_confirmed=data.paymentConfirmed,
         payment_account_type=data.paymentAccountType,
         payer_name=data.payerName,
@@ -268,16 +429,19 @@ async def create_transaction(db: AsyncSession, data: TransactionCreate) -> dict:
         db.add(a)
         att_dicts.append({"id": a.id, "name": a.name, "url": a.url, "type": a.type, "size": a.size})
 
-    # Update account balance (personal 代付不扣公司账户)
-    await _update_balance(db, data.type, data.amount, data.accountId, data.toAccountId,
-                          payment_account_type=data.paymentAccountType)
+    # 余额口径：确认收付才计入（未确认=挂账；personal=垫付不动公司账户）
+    if _counts_toward_balance(data.type, data.paymentConfirmed, data.paymentAccountType):
+        await _update_balance(db, data.type, data.amount, data.accountId, data.toAccountId)
 
     await db.commit()
     await db.refresh(txn)
 
-    await registry.emit("transaction.created", {"id": txn.id, "type": txn.type})
-
     return await _enrich(db, txn, att_dicts)
+
+
+# 修改这些字段会改变资金语义，已入报销批次的流水必须先解除批次
+_MONEY_CRITICAL_FIELDS = {"type", "amount", "date", "accountId", "toAccountId",
+                          "paymentAccountType", "paymentConfirmed"}
 
 
 async def update_transaction(db: AsyncSession, txn_id: str, data: TransactionUpdate) -> Optional[dict]:
@@ -285,18 +449,29 @@ async def update_transaction(db: AsyncSession, txn_id: str, data: TransactionUpd
     if not txn:
         return None
 
-    # Reverse old balance effect
-    await _update_balance(db, txn.type, txn.amount, txn.account_id, txn.to_account_id,
-                          reverse=True, payment_account_type=txn.payment_account_type)
-
     update_data = data.model_dump(exclude_unset=True)
+
+    # 已入报销批次的流水：金额/账户/类型/确认状态被批次快照引用，禁止直改
+    if txn.reimbursement_batch_id and _MONEY_CRITICAL_FIELDS & set(update_data):
+        raise ValueError("该流水已加入报销批次，请先删除批次或完成打款后再修改")
+
+    # 新账户必须真实存在
+    if update_data.get("accountId") and not await db.get(Account, update_data["accountId"]):
+        raise ValueError(f"账户不存在: {update_data['accountId']}")
+    if update_data.get("toAccountId") and not await db.get(Account, update_data["toAccountId"]):
+        raise ValueError(f"转入账户不存在: {update_data['toAccountId']}")
+
+    # Reverse old balance effect（按旧快照判定是否计过）
+    if _counts_toward_balance(txn.type, txn.payment_confirmed, txn.payment_account_type):
+        await _update_balance(db, txn.type, txn.amount, txn.account_id, txn.to_account_id,
+                              reverse=True)
+
     field_map = {
         "categoryId": "category_id",
         "accountId": "account_id",
         "toAccountId": "to_account_id",
         "contactId": "contact_id",
         "invoiceId": "invoice_id",
-        "bookId": "book_id",
         "paymentConfirmed": "payment_confirmed",
         "paymentAccountType": "payment_account_type",
         "payerName": "payer_name",
@@ -316,8 +491,13 @@ async def update_transaction(db: AsyncSession, txn_id: str, data: TransactionUpd
     new_attachments = update_data.pop("attachments", None)
 
     json_fields = {"tags", "invoice_images", "company_account_images"}
+    # 引用列禁止空串哨兵：空即 NULL（外键约束下空串会违约）
+    ref_fields = {"category_id", "account_id", "to_account_id", "contact_id",
+                  "reimbursement_batch_id"}
     for key, value in update_data.items():
         attr = field_map.get(key, key)
+        if attr in ref_fields and value == "":
+            value = None
         if attr in json_fields:
             if isinstance(value, list):
                 setattr(txn, attr, json.dumps([
@@ -330,9 +510,11 @@ async def update_transaction(db: AsyncSession, txn_id: str, data: TransactionUpd
 
     txn.updated_at = datetime.now(timezone.utc).isoformat()
 
-    # Apply new balance effect
-    await _update_balance(db, txn.type, txn.amount, txn.account_id, txn.to_account_id,
-                          payment_account_type=txn.payment_account_type)
+    # Apply new balance effect（按新快照判定是否该计）
+    if _counts_toward_balance(txn.type, txn.payment_confirmed, txn.payment_account_type):
+        if not txn.account_id:
+            raise ValueError("已确认收付的流水必须绑定账户")
+        await _update_balance(db, txn.type, txn.amount, txn.account_id, txn.to_account_id)
 
     # Update attachments if provided
     if new_attachments is not None:
@@ -357,8 +539,6 @@ async def update_transaction(db: AsyncSession, txn_id: str, data: TransactionUpd
     await db.commit()
     await db.refresh(txn)
 
-    await registry.emit("transaction.updated", {"id": txn.id})
-
     return await _enrich(db, txn)
 
 
@@ -367,9 +547,20 @@ async def delete_transaction(db: AsyncSession, txn_id: str) -> bool:
     if not txn:
         return False
 
-    # Reverse balance
-    await _update_balance(db, txn.type, txn.amount, txn.account_id, txn.to_account_id,
-                          reverse=True, payment_account_type=txn.payment_account_type)
+    # 引用保护：入了报销批次 / 被工资记录引用的流水不能直接删
+    if txn.reimbursement_batch_id:
+        raise ValueError("该流水已加入报销批次，请先删除批次或完成打款")
+    from app.employee.models import SalaryRecord
+    linked = await db.execute(
+        select(SalaryRecord.id).where(SalaryRecord.transaction_id == txn_id)
+    )
+    if linked.first():
+        raise ValueError("该流水关联工资发放记录，不能直接删除")
+
+    # Reverse balance（仅当创建/确认时计过）
+    if _counts_toward_balance(txn.type, txn.payment_confirmed, txn.payment_account_type):
+        await _update_balance(db, txn.type, txn.amount, txn.account_id, txn.to_account_id,
+                              reverse=True)
 
     # Delete attachments
     atts = await db.execute(select(Attachment).where(Attachment.transaction_id == txn_id))
@@ -378,8 +569,6 @@ async def delete_transaction(db: AsyncSession, txn_id: str) -> bool:
 
     await db.delete(txn)
     await db.commit()
-
-    await registry.emit("transaction.deleted", {"id": txn_id})
     return True
 
 
@@ -390,42 +579,46 @@ async def _apply_payment_confirmed(db: AsyncSession, txn: Transaction,
                                    account_id: Optional[str] = None) -> None:
     """将单笔交易标记为已付款。
 
-    余额一致性维护（关键）：
-    - 若 txn.account_id 为空且传入 account_id：绑定账户并扣余额（差额流水落地）
-    - 若 payment_account_type 从 personal → 非 personal 转换：原本未扣余额，现在补扣
-    - 若 payment_account_type 从 非 personal → personal 转换：原本扣过，现在退还
+    新口径（与 _counts_toward_balance 对齐）：未确认流水创建时不动余额，
+    确认时一次性计入。personal（私户垫付）确认后仍不动公司余额。
 
-    调用方负责 commit。
+    守卫（均在任何状态变更前抛出，调用方负责 commit）：
+    - 已确认的流水不能重复确认（防双扣）
+    - 已入报销批次的流水必须走报销打款
+    - 非 personal 确认必须落到真实账户（无账户流水须传 account_id 绑定）
     """
-    now = datetime.now(timezone.utc).isoformat()
-    old_pat = txn.payment_account_type  # 必须在覆盖前读取
+    if txn.payment_confirmed:
+        raise ValueError("该流水已确认收付，不能重复确认")
+    if txn.reimbursement_batch_id:
+        raise ValueError("该流水已加入报销批次，请通过报销打款完成支付")
 
-    # 情形 A：txn 有账户、且 personal/非personal 状态切换 → 修正余额
-    if txn.account_id:
-        was_personal = old_pat == "personal"
-        will_personal = account_type == "personal"
-        if was_personal and not will_personal:
-            # 原本不扣，现在该扣 → 补扣
-            await _update_balance(db, txn.type, float(txn.amount),
-                                  txn.account_id, txn.to_account_id)
-        elif not was_personal and will_personal:
-            # 原本已扣，现在视为 personal → 退还
-            await _update_balance(db, txn.type, float(txn.amount),
-                                  txn.account_id, txn.to_account_id, reverse=True)
+    now = datetime.now(timezone.utc).isoformat()
+
+    if txn.type == "transfer":
+        # 转账创建即计入余额，确认仅是状态标记
+        txn.payment_confirmed = True
+        txn.payment_confirmed_at = now
+        txn.updated_at = now
+        return
+
+    # 非 personal 确认必须有账户可落（工资差额等无账户流水在此绑定）
+    if account_type != "personal" and not txn.account_id:
+        if not account_id:
+            raise ValueError("该流水未绑定账户，确认时必须指定收付账户")
+        account = await db.get(Account, account_id)
+        if not account:
+            raise ValueError(f"账户不存在: {account_id}")
+        txn.account_id = account_id
 
     txn.payment_confirmed = True
     txn.payment_account_type = account_type
     txn.payment_confirmed_at = now
     txn.updated_at = now
 
-    # 情形 B：原本无账户（如工资差额流水），现在绑定 → 扣余额
-    if not txn.account_id and account_id and account_type != "personal":
-        account = await db.get(Account, account_id)
-        if not account:
-            raise ValueError(f"账户不存在: {account_id}")
-        txn.account_id = account_id
+    # 确认时点计入余额（创建时未计）
+    if _counts_toward_balance(txn.type, True, account_type):
         await _update_balance(db, txn.type, float(txn.amount),
-                              account_id, txn.to_account_id)
+                              txn.account_id, txn.to_account_id)
 
 
 async def confirm_payment(db: AsyncSession, txn_id: str, account_type: str,
@@ -436,7 +629,6 @@ async def confirm_payment(db: AsyncSession, txn_id: str, account_type: str,
     await _apply_payment_confirmed(db, txn, account_type, account_id)
     await db.commit()
     await db.refresh(txn)
-    await registry.emit("transaction.payment_confirmed", {"id": txn_id})
     return await _enrich(db, txn)
 
 
@@ -462,12 +654,15 @@ async def batch_confirm_payment(db: AsyncSession, ids: List[str], account_type: 
         if txn.payment_confirmed:
             skipped.append({"id": tid, "reason": "already_confirmed"})
             continue
-        await _apply_payment_confirmed(db, txn, account_type, account_id)
+        try:
+            await _apply_payment_confirmed(db, txn, account_type, account_id)
+        except ValueError as e:
+            # 守卫拒绝（入报销批次/缺账户等），跳过该笔不影响其余
+            skipped.append({"id": tid, "reason": str(e)})
+            continue
         success_ids.append(tid)
     if success_ids:
         await db.commit()
-        for tid in success_ids:
-            await registry.emit("transaction.payment_confirmed", {"id": tid})
     return {
         "success": len(success_ids),
         "successIds": success_ids,
@@ -486,7 +681,6 @@ async def confirm_invoice(db: AsyncSession, txn_id: str, invoice_id: Optional[st
     txn.updated_at = datetime.now(timezone.utc).isoformat()
     await db.commit()
     await db.refresh(txn)
-    await registry.emit("transaction.invoice_confirmed", {"id": txn_id})
     return await _enrich(db, txn)
 
 
@@ -498,7 +692,6 @@ async def skip_invoice(db: AsyncSession, txn_id: str) -> Optional[dict]:
     txn.updated_at = datetime.now(timezone.utc).isoformat()
     await db.commit()
     await db.refresh(txn)
-    await registry.emit("transaction.invoice_skipped", {"id": txn_id})
     return await _enrich(db, txn)
 
 
@@ -512,7 +705,6 @@ async def confirm_tax(db: AsyncSession, txn_id: str, tax_period: str) -> Optiona
     txn.updated_at = datetime.now(timezone.utc).isoformat()
     await db.commit()
     await db.refresh(txn)
-    await registry.emit("transaction.tax_declared", {"id": txn_id})
     return await _enrich(db, txn)
 
 
@@ -529,6 +721,23 @@ async def get_pending_invoices(db: AsyncSession) -> List[dict]:
     result = await db.execute(
         select(Transaction)
         .where(and_(Transaction.invoice_needed == True, Transaction.invoice_completed == False))
+        .order_by(Transaction.date.desc())
+    )
+    return await _batch_enrich(db, list(result.scalars().all()))
+
+
+async def get_reimbursable_transactions(db: AsyncSession) -> List[dict]:
+    """全部可入报销批次的流水：私户垫付支出且未关联批次（全量，不分页）。
+
+    创建报销单的候选池必须用本接口，不能复用流水列表页的分页缓存。
+    """
+    result = await db.execute(
+        select(Transaction)
+        .where(and_(
+            Transaction.type == "expense",
+            Transaction.payment_account_type == "personal",
+            Transaction.reimbursement_batch_id.is_(None),
+        ))
         .order_by(Transaction.date.desc())
     )
     return await _batch_enrich(db, list(result.scalars().all()))
@@ -559,7 +768,6 @@ async def batch_confirm_tax(db: AsyncSession, tax_period: str) -> dict:
         count += 1
     if count > 0:
         await db.commit()
-        await registry.emit("transaction.tax_batch_declared", {"count": count, "period": tax_period})
     return {"count": count, "taxPeriod": tax_period, "declaredAt": now}
 
 

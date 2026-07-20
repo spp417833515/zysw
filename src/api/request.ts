@@ -21,6 +21,14 @@ instance.interceptors.response.use(
   },
 );
 
+// 后端业务错误返回 HTTP 200 + code!=0，调用方必须显式检查，
+// 否则失败会被当作成功（全项目统一用这一个检查点）
+export function ensureOk(res: { code: number; message?: string }, fallback: string): void {
+  if (res.code !== 0) {
+    throw new Error(res.message || fallback);
+  }
+}
+
 // Typed wrapper: interceptor returns response.data directly, so R = T
 const request = {
   get<T = unknown>(url: string, config?: AxiosRequestConfig): Promise<T> {

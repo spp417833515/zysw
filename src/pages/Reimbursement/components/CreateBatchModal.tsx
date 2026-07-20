@@ -1,7 +1,9 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Modal, Form, Input, Table, Select, message } from 'antd';
+import type { Transaction } from '@/types/transaction';
 import { useReimbursementStore } from '@/store/useReimbursementStore';
-import { useTransactionStore } from '@/store/useTransactionStore';
+import { getReimbursableTransactions } from '@/api/transaction';
+
 import { formatAmount } from '@/utils/format';
 
 interface Props {
@@ -12,16 +14,23 @@ interface Props {
 
 const CreateBatchModal: React.FC<Props> = ({ open, onClose, onSuccess }) => {
   const createBatch = useReimbursementStore((s) => s.createBatch);
-  const transactions = useTransactionStore((s) => s.transactions);
 
   const [form] = Form.useForm();
   const [selectedTxnIds, setSelectedTxnIds] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [filterEmployee, setFilterEmployee] = useState<string | undefined>(undefined);
+  // 候选垫付流水必须全量拉取，不能复用流水页的分页缓存（那只有当前一页且受筛选影响）
+  const [availableTxns, setAvailableTxns] = useState<Transaction[]>([]);
+  const [txnsLoading, setTxnsLoading] = useState(false);
 
-  const availableTxns = transactions.filter(
-    (t) => t.paymentAccountType === 'personal' && !t.reimbursementBatchId
-  );
+  useEffect(() => {
+    if (!open) return;
+    setTxnsLoading(true);
+    getReimbursableTransactions()
+      .then((res) => setAvailableTxns(res.data ?? []))
+      .catch(() => message.error('加载待报销垫付流水失败'))
+      .finally(() => setTxnsLoading(false));
+  }, [open]);
 
   const employeeNames = useMemo(() => {
     const names = new Set(availableTxns.map((t) => t.payerName).filter(Boolean));
@@ -66,8 +75,8 @@ const CreateBatchModal: React.FC<Props> = ({ open, onClose, onSuccess }) => {
       message.success('报销单创建成功');
       handleCancel();
       onSuccess();
-    } catch {
-      message.error('创建失败');
+    } catch (e) {
+      message.error(e instanceof Error ? e.message : '创建失败');
     } finally {
       setSubmitting(false);
     }
@@ -100,6 +109,7 @@ const CreateBatchModal: React.FC<Props> = ({ open, onClose, onSuccess }) => {
           options={employeeNames.map((n) => ({ label: n, value: n }))} />
       </div>
       <Table size="small" rowKey="id" dataSource={filteredTxns} columns={columns}
+        loading={txnsLoading}
         pagination={{ pageSize: 5 }}
         rowSelection={{ selectedRowKeys: selectedTxnIds, onChange: (keys) => setSelectedTxnIds(keys as string[]) }} />
     </Modal>

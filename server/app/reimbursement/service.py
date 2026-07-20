@@ -1,6 +1,7 @@
 import json
 import uuid
 from datetime import datetime, timezone
+from decimal import Decimal
 from typing import Optional
 
 from sqlalchemy import select, func
@@ -9,7 +10,18 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.reimbursement.models import ReimbursementBatch
 from app.reimbursement.schemas import ReimbursementCreate, ReimbursementComplete
 from app.transaction.models import Transaction
-from app.account.models import Account
+from app.transaction.service import (
+    REIMBURSE_PAYOUT_MARKER_PREFIX,
+    create_confirmed_transaction,
+)
+
+# 流水分类（与 seed 数据一致）
+ADVANCE_CATEGORY_ID = "f1107c6b-efa8-4f8b-a6ce-970f158cdd87"  # 垫付
+TRANSFER_FEE_CATEGORY_ID = "fecee137-47e8-4e81-b50d-b0316fe2f806"  # 转账手续费
+
+
+def make_payout_marker(batch_no: str) -> str:
+    return f"{REIMBURSE_PAYOUT_MARKER_PREFIX}{batch_no}]"
 
 
 async def _load_batch_txns(db: AsyncSession, batch: ReimbursementBatch) -> list:
@@ -53,27 +65,32 @@ async def _generate_batch_no(db: AsyncSession) -> str:
 
 
 async def create_batch(db: AsyncSession, data: ReimbursementCreate) -> dict:
-    # Validate transactions
+    # Validate transactions（去重，防同一 ID 传两次导致金额双计）
+    txn_ids = list(dict.fromkeys(data.transactionIds))
+    if not txn_ids:
+        raise ValueError("至少选择一笔垫付流水")
     txns = []
-    total = 0.0
-    for tid in data.transactionIds:
+    total = Decimal("0")
+    for tid in txn_ids:
         txn = await db.get(Transaction, tid)
         if not txn:
             raise ValueError(f"交易 {tid} 不存在")
+        if txn.type != "expense":
+            raise ValueError(f"交易 {tid} 不是支出流水，不能报销")
         if txn.payment_account_type != "personal":
             raise ValueError(f"交易 {tid} 不是个人代付")
         if txn.reimbursement_batch_id:
             raise ValueError(f"交易 {tid} 已关联报销单")
         txns.append(txn)
-        total += txn.amount
+        total += Decimal(str(float(txn.amount)))
 
     batch_no = await _generate_batch_no(db)
     batch = ReimbursementBatch(
         id=str(uuid.uuid4()),
         batch_no=batch_no,
         employee_name=data.employeeName,
-        transaction_ids=json.dumps(data.transactionIds),
-        total_amount=round(total, 2),
+        transaction_ids=json.dumps(txn_ids),
+        total_amount=round(float(total), 2),
         note=data.note or "",
     )
     db.add(batch)
@@ -122,26 +139,18 @@ async def complete_batch(db: AsyncSession, batch_id: str, data: ReimbursementCom
         txn.reimbursement_status = "confirmed"
 
     if data.fee and data.fee > 0:
-        fee_txn = Transaction(
-            id=str(uuid.uuid4()),
-            type="expense",
+        # 落流水 + 扣余额统一走 transaction 模块唯一入口
+        fee_txn = await create_confirmed_transaction(
+            db,
+            txn_type="expense",
             amount=data.fee,
             date=data.completedDate,
-            category_id=None,
+            category_id=TRANSFER_FEE_CATEGORY_ID,
             account_id=data.feeAccountId,
             description=f"报销手续费 - {batch.batch_no} ({batch.employee_name})",
-            tags="[]",
-            payment_confirmed=True,
-            payment_account_type="company",
-            payment_confirmed_at=now,
-            invoice_needed=False,
+            confirmed_at=now,
         )
-        db.add(fee_txn)
         batch.fee_transaction_id = fee_txn.id
-        # Update account balance
-        account = await db.get(Account, data.feeAccountId)
-        if account:
-            account.balance -= data.fee
 
     await db.commit()
     await db.refresh(batch)
@@ -180,10 +189,17 @@ async def get_unpaid_completed(db: AsyncSession) -> dict:
 
 
 async def confirm_payment(db: AsyncSession, batch_id: str, account_id: Optional[str] = None) -> Optional[dict]:
-    """确认报销打款：标记已打款 + 扣减账户余额"""
+    """确认报销打款：标记已打款 + 生成打款流水 + 扣减账户余额。
+
+    打款流水带 [RB:批次号] 标记：报销打款是清偿对员工的负债，
+    利润表费用口径会按此标记排除（费用已在垫付原始流水确认），
+    现金流量表则按公司实际出款计入。
+    """
     batch = await db.get(ReimbursementBatch, batch_id)
     if not batch or batch.status != "confirmed":
         return None
+    if not account_id:
+        raise ValueError("必须选择打款账户")
 
     now = datetime.now(timezone.utc).isoformat()
     batch.status = "paid"
@@ -196,12 +212,20 @@ async def confirm_payment(db: AsyncSession, batch_id: str, account_id: Optional[
         txn.payment_confirmed_at = now
         txn.reimbursement_status = "paid"
 
-    # 更新账户余额（钱确实从公司账户出）
-    pay_amount = batch.actual_amount if batch.actual_amount is not None else batch.total_amount
-    if account_id:
-        account = await db.get(Account, account_id)
-        if account:
-            account.balance -= pay_amount
+    # 打款落流水 + 扣账户余额统一走 transaction 模块唯一入口
+    pay_amount = round(float(batch.actual_amount if batch.actual_amount is not None else batch.total_amount), 2)
+    payout_txn = await create_confirmed_transaction(
+        db,
+        txn_type="expense",
+        amount=pay_amount,
+        date=now[:10],
+        category_id=ADVANCE_CATEGORY_ID,
+        account_id=account_id,
+        description=f"{make_payout_marker(batch.batch_no)} 报销打款 - {batch.employee_name}",
+        confirmed_at=now,
+    )
+    # 结构化关联（口径过滤/对账都查这一列，描述标记仅作展示）
+    payout_txn.payout_batch_id = batch.id
 
     await db.commit()
     await db.refresh(batch)
